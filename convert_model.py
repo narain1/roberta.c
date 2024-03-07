@@ -6,39 +6,106 @@ import struct
 from functools import reduce
 import numpy as np
 
+config = {
+    'vocab_size': 30522,
+    'hidden_size': 768,
+    'intermediate_size': 3072,
+    'n_max_tokens' : 512,
+    'n_attention_heads': 12,
+    'n_hidden_layers': 12,
+}
+
+config_vars = list(config.keys())
+
+class Tensor:
+    def __init__(self, f, *shape):
+        assert all(isinstance(x, int) for x in shape)
+        self.shape = shape
+        self.load_weights(f)
+
+    def __repr__(self):
+        return f'{self.shape}'
+
+    def load_weights(self, file):
+        res = reduce(lambda x, y: x*y, self.shape)
+        self.data = np.frombuffer(file.read(res * 4), dtype=np.float32)
+
+class EmbeddingLayer:
+    def __init__(self, file, _config):
+        self.word_emb = Tensor(file, _config['vocab_size'], _config['hidden_size'])
+        self.pos_emb = Tensor(file, _config['n_max_tokens'], _config['hidden_size'])
+        self.tok_type_w = Tensor(file, 2, _config['hidden_size'])
+        self.ln = LayerNorm(file, _config['hidden_size'])
+
+class Linear:
+    def __init__(self, file, f_in, f_out, bias=True):
+        self.w = Tensor(file, f_in, f_out)
+        self.b = Tensor(file, f_in)
+
+class LayerNorm:
+    def __init__(self, file, hidden_size):
+        self.gamma = Tensor(file, hidden_size)
+        self.beta = Tensor(file, hidden_size)
+
+class EncoderLayer:
+    def __init__(self, file, hidden_size, ff_dim):
+        self.query = Linear(file, hidden_size, hidden_size)
+        self.key = Linear(file, hidden_size, hidden_size, bias=True)
+        self.value = Linear(file, hidden_size, hidden_size)
+        self.ff_in = Linear(file, ff_dim, hidden_size)
+        self.ff_out = Linear(file, hidden_size, ff_dim)
+        self.ln = LayerNorm(file, hidden_size)
+
+class ClsLayer:
+    def __init__(self, file, hidden_size, vocab_size):
+        self.pred_bias = Tensor(file, vocab_size)
+        self.transform = Linear(file, hidden_size, hidden_size)
+        self.ln = LayerNorm(file, hidden_size)
+        self.decoder = Tensor(file, vocab_size, hidden_size)
+        self.seq = Linear(file, 2, hidden_size)
+
+
+class RobertaModel:
+    def __init__(self, file, _config):
+        self.emb = EmbeddingLayer(file, _config)
+        self.EncoderLayers = [EncoderLayer(file,
+                                           _config['hidden_size'],
+                                           _config['intermediate_size'])
+                              for _ in range(_config['n_hidden_layers'])
+                             ]
+        self.pool = Linear(file, _config['hidden_size'], _config['hidden_size'])
+        self.cls = ClsLayer(file, 2, _config['hidden_size'])
 
 def convert_model(path):
     model = torch.load(f'{path}/pytorch_model.bin')
+    print(model['bert.embeddings.word_embeddings.weight'])
+    rev_config = {j:i for i,j in config.items()}
     with open('model.bin', 'wb') as f:
-        f.write(b"start")
-        f.write(struct.pack('I', len(model)))
+        f.write(struct.pack('I', len(config)))
+        for ck, cv in config.items():
+            f.write(struct.pack('I', cv))
         for i, (k, v) in enumerate(model.items()):
-            s = v.shape
-            print(i, k, s)
-            f.write(struct.pack("I", len(s)))
-            # writing dimensions
-            for d in v.shape: f.write(struct.pack("I", d))
+            # if k.startswith('cls'): continue
+            print(i, k, v.shape)
+            # assert not any(ss is None for ss in s), f"failed in config creation {v.shape}, {config}"
             v.cpu().numpy().tofile(f)
-    return v
 
 def test_model():
     with open('model.bin', 'rb') as f:
-        o = f.read(5)
-        n_layers = struct.unpack("I", f.read(4))[0]
-        for l in range(n_layers):
-            layer_ndim = struct.unpack("I", f.read(4))[0]
-            layer_dim = struct.unpack("I"*layer_ndim, f.read(4*layer_ndim)) 
-            res = reduce(lambda x, y: x*y, layer_dim)
-            layer = np.frombuffer(f.read(res * 4), dtype=np.float32)
-    return layer
+        conf_size = struct.unpack("I", f.read(4))[0]
+        _config = {ck: struct.unpack("I", f.read(4))[0] for ck in config_vars}
+
+        model = RobertaModel(f, _config)
+
+    return model
 
 
 def convert_tokenizer(path):
-    with open(f'{path}/vocab.json', encoding='utf-8') as f: o = json.load(f)
+    #with open(f'{path}/vocab.json', encoding='utf-8') as f: o = json.load(f)
     with open(f'{path}/tokenizer.json', encoding='utf-8') as f: tokenizer_json = json.load(f)
 
     tokens, scores = [], []
-    for j,i in o.items():
+    for j,i in tokenizer_json['model']['vocab'].items():
         j = j.replace('_', ' ')
         j = j.encode('utf-8')
         tokens.append(j)
@@ -52,10 +119,10 @@ def convert_tokenizer(path):
             f.write(struct.pack("fI", scores, len(bytes)))
             f.write(bytes)
 
-    print("tokenizer exported")
 
 convert_tokenizer("model")
-d1 = convert_model('model')
+print('tokenizer exported')
+
+convert_model('model')
 d2 = test_model()
-print(d1.numpy(), d1.dtype)
-print(d2, d2.dtype)
+print('model exported')

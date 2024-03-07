@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define MAX_TOKENS 1000
 #define MAX_LENGTH 100
@@ -20,72 +23,152 @@ typedef struct {
   unsigned char byte_pieces[512];
 } Tokenizer;
 
-typedef struct {
-  int dim;
-  int hidden_dim;
-  int n_layers;
-  int n_heads;
+struct ModelConfig {
   int vocab_size;
-  int seq_len;
-} ModelConfig;
+  int hidden_size;
+  int intermediate_size;
+  int n_max_tokens;
+  int n_att_heads;
+  int n_hidden_layers;
+};
 
-ModelConfig base_config = {
-  .dim = 768,
-  .hidden_dim = 3072,
-  .n_layers = 12,
-  .n_heads = 8,
+struct ModelConfig base_config = {
+  .hidden_size = 768,
+  .intermediate_size = 3072,
+  .n_hidden_layers = 12,
+  .n_att_heads = 12,
   .vocab_size = 30522,
-  .seq_len = 512
+  .n_max_tokens = 512
 };
 
 struct Tensor {
-  int *data;
+  float *data;
   int *shape;
 };
 
-struct RobertaLayer {
-  struct Tensor *ln_attn_w;
-  struct Tensor *ln_attn_b;
-  
-  struct Tensor *ln_out_w;
-  struct Tensor *ln_out_b;
+struct Linear {
+  struct Tensor *w;
+  struct Tensor *b;
+};
 
-  struct Tensor *q_w;
-  struct Tensor *q_b;
-  struct Tensor *k_w;
-  struct Tensor *k_b;
-  struct Tensor *v_w;
-  struct Tensor *v_b;
-
-  struct Tensor *o_w;
-  struct Tensor *o_b;
-  
-  struct Tensor *ff_i_w;
-  struct Tensor *ff_i_b;
-
-  struct Tensor *ff_o_w;
-  struct Tensor *ff_o_b;
+struct LayerNorm {
+  struct Tensor *gamma;
+  struct Tensor *beta;
 };
 
 struct EmbeddingLayer {
-  struct Tensor *Embedding_w;
-  struct Tensor *pos_w;
-  struct Tensor *token_type;
-  struct Tensor *ln_a;
-  struct Tensor *ln_b;
+  struct Tensor *word_emb;
+  struct Tensor *pos_emb;
+  struct Tensor *tok_type_w;
+  struct LayerNorm *ln;
+};
+
+struct EncoderLayer {
+  struct Linear *query;
+  struct Linear *key;
+  struct Linear *value;
+  struct Linear *ff_in;
+  struct Linear *ff_out;
+  struct LayerNorm *ln;
 };
 
 struct RobertaModel {
-  ModelConfig *config;
+  struct ModelConfig *config;
   struct EmbeddingLayer *embed;
   struct RobertaLayer *layers;
 };
 
-struct RobertaLayer load_model(struct RobertaModel *model, const char *fname) {
-  printf("%s: loading model mode from '%s'\n", __func__, fname);
+size_t reduce_product(int *arr, int size) {
+    size_t product = 1;
+    for (int i = 0; i < size; i++) {
+        product *= (size_t)arr[i];
+    }
+    return product;
 }
+
+void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
+  printf("in\n");
+  data = (float*)malloc(sizeof(float) * size);
+  printf("size of offset is %lu %lu\n", *offset, size);
+  for (size_t i=0; i<size; i++) {
+    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
+  }
+  *offset += size; 
+}
+
+void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
+  int *conf_arr = (int *)malloc(sizeof(int) * *conf_sz);
+  for (int i=0; i< *conf_sz; i++) {
+    conf_arr[i] = *((int*)(buffer + sizeof(int) + sizeof(int) * i));
+  }
+
+  // initialize config
+  data->vocab_size = conf_arr[0];
+  data->hidden_size = conf_arr[1];
+  data->intermediate_size = conf_arr[2];
+  data->n_max_tokens = conf_arr[3];
+  data->n_att_heads = conf_arr[4];
+  data->n_hidden_layers = conf_arr[5];
+}
+
+
+void load_model(struct RobertaModel *model, const char *fname) {
+  printf("%s: loading model from '%s'\n", __func__, fname);
   
+  int fd;
+  char *buffer;
+  float *arr;
+  off_t file_size;
+  unsigned long cur_size = 0;
+  unsigned long offset = 0;
+
+  // sanity check file
+  fd = open("model.bin", O_RDONLY);
+  if (fd == -1) { perror("error opening file"); exit(EXIT_FAILURE); }
+  printf("file opened\n");
+
+  // get file size to load in memory
+  file_size = lseek(fd, 0, SEEK_END);
+  if (file_size == -1) { fprintf(stderr, "error getting file size\n"), close(fd); exit(EXIT_FAILURE); }
+
+  buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (buffer == MAP_FAILED) { printf("error mapping file to memory"); close(fd); exit(EXIT_FAILURE); }
+  close(fd);
   
+  int *conf_sz = (int*)buffer;
+  printf("config size %d\n", *conf_sz);
+
+  int *conf_arr = (int *)malloc(sizeof(int) * *conf_sz);
+  model->config = (struct ModelConfig*)malloc(sizeof(struct ModelConfig));
+ 
+  load_config(model->config, buffer, conf_sz);
+
+  model->embed = (struct EmbeddingLayer*)malloc(sizeof(struct EmbeddingLayer));
+  model->embed->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+
+  cur_size = model->config->vocab_size * model->config->hidden_size;
+  offset += sizeof(int) * (*conf_sz + 1);
+  load_tensor(model->embed->word_emb->data, cur_size, &offset, buffer);
+  
+  cur_size = model->config->n_max_tokens * model->config->hidden_size;
+  printf("%d\n", offset);
+  load_tensor(model->embed->pos_emb->data, cur_size, &offset, buffer);
+  printf("%d\n", offset);
+
+  cur_size = 2 * model->config->hidden_size;
+  load_tensor(model->embed->tok_type_w->data, cur_size, &offset, buffer);
+  printf("offset value %d\n", offset);
+
+  cur_size = model->config->hidden_size;
+  load_tensor(model->embed->ln->gamma->data, cur_size, &offset, buffer);
+  printf("offset value %d\n", offset);
+
+  cur_size = model->config->hidden_size;
+  load_tensor(model->embed->ln->beta->data, cur_size, &offset, buffer);
+  printf("offset value %d\n", offset);
+
+}
+
 
 void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
   t->vocab_size = vocab_size;
@@ -194,13 +277,12 @@ char* decode(Tokenizer* t, int prev_token, int token) {
 
 
 
+
 void main() {
+  unsigned int vocab_size = 30522;
   Tokenizer tokenizer;
-  uint32_t vocab_size = 30522;
-  uint32_t hidden_dim = 768;
-  uint32_t n_layers = 12;
-  uint32_t ff_dim = 3072;
   char *tokenizer_path = "tokenizer.bin";
+  char *model_path = "model.bin";
   build_tokenizer(&tokenizer, tokenizer_path, vocab_size);
   printf("loaded tokenizer\n");
   char *prompt = "Buying a mattress online can be a waking nightmare, and picking the wrong one can literally cause bad dreams or kill your back. It doesn't help that the online market is flooded with options or that there are more dedicated mattress review sites than stars in the sky.";
@@ -216,15 +298,17 @@ void main() {
     printf("%d, ", prompt_tokens[i]);
   }
   printf("\n");
+  printf("\nThe number of tokens is %d\n", num_prompt_tokens);
 
-  int prev_token=prompt_tokens[0], next_token=prompt_tokens[1];
   for (int i=0; i<num_prompt_tokens; i++) {
-    prev_token = i=0 ? prompt_tokens[0] : next_token;
-    char *token = decode(&tokenizer, prev_token, next_token);
+    char *token = decode(&tokenizer, prompt_tokens[i], prompt_tokens[i]);
     printf("%s ", token);
   }
   printf("\n");
+
+  struct RobertaModel *model = malloc(sizeof(struct RobertaModel));
     
+  load_model(model, "model.bin"); 
   free_tokenizer(&tokenizer);
-  printf("freed tokenizer");
+  printf("freed tokenizer\n");
 }
