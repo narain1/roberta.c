@@ -75,7 +75,7 @@ struct EncoderLayer {
 struct RobertaModel {
   struct ModelConfig *config;
   struct EmbeddingLayer *embed;
-  struct RobertaLayer *layers;
+  struct EncoderLayer *layers;
 };
 
 size_t reduce_product(int *arr, int size) {
@@ -111,6 +111,43 @@ void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
   data->n_hidden_layers = conf_arr[5];
 }
 
+void initialize_linear(struct Linear *layer) {
+  layer = (struct Linear*)malloc(sizeof(struct Linear));
+  layer->w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  layer->b = (struct Tensor*)malloc(sizeof(struct Tensor));
+}
+
+void initalize_ln(struct LayerNorm *ln) {
+  ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
+  ln->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
+  ln->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
+}
+
+
+void initialize_parameters(struct RobertaModel *model) {
+
+  // initializing embedding layer
+  model->embed = (struct EmbeddingLayer*)malloc(sizeof(struct EmbeddingLayer));
+  model->embed->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  model->embed->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  model->embed->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  initalize_ln(model->embed->ln);
+  
+  int n = model->config->n_hidden_layers;
+
+  model->layers = (struct EncoderLayer*)malloc(n * sizeof(struct EncoderLayer));
+  model->layers = (struct EncoderLayer*)malloc(sizeof(struct EncoderLayer));
+
+  initialize_linear(model->layers->query);
+  initialize_linear(model->layers->key);
+  initialize_linear(model->layers->value);
+  initialize_linear(model->layers->ff_in);
+  initialize_linear(model->layers->ff_out);
+  initalize_ln(model->layers->ln);
+
+}
+
+ 
 
 void load_model(struct RobertaModel *model, const char *fname) {
   printf("%s: loading model from '%s'\n", __func__, fname);
@@ -142,32 +179,47 @@ void load_model(struct RobertaModel *model, const char *fname) {
   model->config = (struct ModelConfig*)malloc(sizeof(struct ModelConfig));
  
   load_config(model->config, buffer, conf_sz);
-
-  model->embed = (struct EmbeddingLayer*)malloc(sizeof(struct EmbeddingLayer));
-  model->embed->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  initialize_parameters(model);
 
   cur_size = model->config->vocab_size * model->config->hidden_size;
   offset += sizeof(int) * (*conf_sz + 1);
   load_tensor(model->embed->word_emb->data, cur_size, &offset, buffer);
   
   cur_size = model->config->n_max_tokens * model->config->hidden_size;
-  printf("%d\n", offset);
   load_tensor(model->embed->pos_emb->data, cur_size, &offset, buffer);
-  printf("%d\n", offset);
 
   cur_size = 2 * model->config->hidden_size;
   load_tensor(model->embed->tok_type_w->data, cur_size, &offset, buffer);
-  printf("offset value %d\n", offset);
 
   cur_size = model->config->hidden_size;
   load_tensor(model->embed->ln->gamma->data, cur_size, &offset, buffer);
-  printf("offset value %d\n", offset);
 
   cur_size = model->config->hidden_size;
   load_tensor(model->embed->ln->beta->data, cur_size, &offset, buffer);
-  printf("offset value %d\n", offset);
+
+  int n_layers = model->config->n_hidden_layers;
+
+  cur_size = model->config->hidden_size * model->config->hidden_size;
+  load_tensor(model->layers->query->w->data, cur_size, &offset, buffer);
+
+   // cur_size = model->config->hidden_size;
+    //load_tensor(model->layers->query[i]->b->data, cur_size, &offset, buffer);
+
+    //cur_size = model->config->hidden_size * model->config->hidden_size;
+    //load_tensor(model->layers->key[i]->w->data, cur_size, &offset, buffer);
+
+    //cur_size = model->config->hidden_size;
+    //load_tensor(model->layers->key[i]->b->data, cur_size, &offset, buffer);
+
+    //cur_size = model->config->hidden_size * model->config->hidden_size;
+    //load_tensor(model->layers->value[i]->w->data, cur_size, &offset, buffer);
+ 
+    //cur_size = model->config->hidden_size;
+    //load_tensor(model->layers->key[i]->b->data, cur_size, &offset, buffer);
+
 
 }
+
 
 
 void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
