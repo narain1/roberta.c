@@ -87,7 +87,6 @@ size_t reduce_product(int *arr, int size) {
 }
 
 void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
-  printf("in\n");
   data = (float*)malloc(sizeof(float) * size);
   printf("size of offset is %lu %lu\n", *offset, size);
   for (size_t i=0; i<size; i++) {
@@ -111,16 +110,16 @@ void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
   data->n_hidden_layers = conf_arr[5];
 }
 
-void initialize_linear(struct Linear *layer) {
-  layer = (struct Linear*)malloc(sizeof(struct Linear));
-  layer->w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  layer->b = (struct Tensor*)malloc(sizeof(struct Tensor));
+void initialize_linear(struct Linear **layer) {
+  *layer = (struct Linear*)malloc(sizeof(struct Linear));
+  (*layer)->w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  (*layer)->b = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
-void initalize_ln(struct LayerNorm *ln) {
-  ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
-  ln->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
-  ln->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
+void initalize_ln(struct LayerNorm **ln) {
+  *ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
+  (*ln)->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
+  (*ln)->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
 
@@ -131,19 +130,26 @@ void initialize_parameters(struct RobertaModel *model) {
   model->embed->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   model->embed->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   model->embed->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  initalize_ln(model->embed->ln);
+  initalize_ln(&(model->embed->ln));
+  //model->embed->ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
+  //model->embed->ln->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
+  //model->embed->ln->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
   
   int n = model->config->n_hidden_layers;
 
-  model->layers = (struct EncoderLayer*)malloc(n * sizeof(struct EncoderLayer));
-  model->layers = (struct EncoderLayer*)malloc(sizeof(struct EncoderLayer));
+  struct EncoderLayer *layers = (struct EncoderLayer*)malloc(n * sizeof(struct EncoderLayer));
 
-  initialize_linear(model->layers->query);
-  initialize_linear(model->layers->key);
-  initialize_linear(model->layers->value);
-  initialize_linear(model->layers->ff_in);
-  initialize_linear(model->layers->ff_out);
-  initalize_ln(model->layers->ln);
+  for (int i=0; i<n; i++) {
+    printf("inside");
+    initialize_linear(&(layers[i].query));
+    initialize_linear(&(layers[i].key));
+    initialize_linear(&(layers[i].value));
+    initialize_linear(&(layers[i].ff_in));
+    initialize_linear(&(layers[i].ff_out));
+    initalize_ln(&(layers[i].ln));
+  }
+
+  model->layers = layers;
 
 }
 
@@ -199,23 +205,25 @@ void load_model(struct RobertaModel *model, const char *fname) {
 
   int n_layers = model->config->n_hidden_layers;
 
-  cur_size = model->config->hidden_size * model->config->hidden_size;
-  load_tensor(model->layers->query->w->data, cur_size, &offset, buffer);
+  for (int i=0; i<n_layers; i++) {
+    cur_size = model->config->hidden_size * model->config->hidden_size;
+    load_tensor(model->layers[i].query->w->data, cur_size, &offset, buffer);
 
-   // cur_size = model->config->hidden_size;
-    //load_tensor(model->layers->query[i]->b->data, cur_size, &offset, buffer);
+    cur_size = model->config->hidden_size;
+    load_tensor(model->layers[i].query->b->data, cur_size, &offset, buffer);
 
-    //cur_size = model->config->hidden_size * model->config->hidden_size;
-    //load_tensor(model->layers->key[i]->w->data, cur_size, &offset, buffer);
+    cur_size = model->config->hidden_size * model->config->hidden_size;
+    load_tensor(model->layers[i].key->w->data, cur_size, &offset, buffer);
 
-    //cur_size = model->config->hidden_size;
-    //load_tensor(model->layers->key[i]->b->data, cur_size, &offset, buffer);
+    cur_size = model->config->hidden_size;
+    load_tensor(model->layers[i].key->b->data, cur_size, &offset, buffer);
 
-    //cur_size = model->config->hidden_size * model->config->hidden_size;
-    //load_tensor(model->layers->value[i]->w->data, cur_size, &offset, buffer);
- 
-    //cur_size = model->config->hidden_size;
-    //load_tensor(model->layers->key[i]->b->data, cur_size, &offset, buffer);
+    cur_size = model->config->hidden_size * model->config->hidden_size;
+    load_tensor(model->layers[i].value->w->data, cur_size, &offset, buffer);
+
+    cur_size = model->config->hidden_size;
+    load_tensor(model->layers[i].key->b->data, cur_size, &offset, buffer);
+  }
 
 
 }
