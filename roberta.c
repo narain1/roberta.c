@@ -24,12 +24,12 @@ typedef struct {
 } Tokenizer;
 
 struct ModelConfig {
-  int vocab_size;
-  int hidden_size;
-  int intermediate_size;
-  int n_max_tokens;
-  int n_att_heads;
-  int n_hidden_layers;
+  unsigned int vocab_size;
+  unsigned int hidden_size;
+  unsigned int intermediate_size;
+  unsigned int n_max_tokens;
+  unsigned int n_att_heads;
+  unsigned int n_hidden_layers;
 };
 
 struct ModelConfig base_config = {
@@ -43,7 +43,8 @@ struct ModelConfig base_config = {
 
 struct Tensor {
   float *data;
-  int *shape;
+  unsigned int *shape;
+  unsigned int ndim;
 };
 
 struct Linear {
@@ -67,15 +68,26 @@ struct EncoderLayer {
   struct Linear *query;
   struct Linear *key;
   struct Linear *value;
+  struct Linear *output;
+  struct LayerNorm *ln1;
   struct Linear *ff_in;
   struct Linear *ff_out;
+  struct LayerNorm *ln2;
+};
+
+struct Classifier {
+  struct Tensor *pred_bias;
+  struct Linear *transform_linear;
   struct LayerNorm *ln;
+  struct Tensor *decoder_weight;
+  struct Linear *seq;
 };
 
 struct RobertaModel {
   struct ModelConfig *config;
   struct EmbeddingLayer *embed;
   struct EncoderLayer *layers;
+  struct Classifier *clf;
 };
 
 size_t reduce_product(int *arr, int size) {
@@ -95,10 +107,99 @@ void load_tensor(float *data, const unsigned long size, unsigned long *offset, c
   *offset += size; 
 }
 
+void load_tensor1d(struct Tensor *t, 
+    unsigned long d1, 
+    unsigned long *offset, 
+    char *buffer) {
+
+  size_t dim = (size_t)d1;
+  float *data = (float*)malloc(sizeof(float)*d1);
+  unsigned int  *s = (unsigned int*)malloc(sizeof(unsigned int));
+  *s = d1;
+  
+  for (size_t i=0; i<dim; i++) {
+    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
+  }
+  *offset += dim * sizeof(float);
+  t->data = data;
+  t->shape = s;
+  t->ndim = 1;
+}
+
+
+void load_tensor2d(struct Tensor *t, 
+    unsigned long d1,
+    unsigned long d2, 
+    unsigned long *offset, 
+    char *buffer) {
+  size_t dim = d1 * d2;
+  float *data = (float*)malloc(sizeof(float)*dim);
+  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
+
+  s[0] = d1;
+  s[1] = d2;
+  
+  for (size_t i=0; i<dim; i++) {
+    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
+  }
+  *offset += dim * sizeof(float);
+  t->data = data;
+  t->shape = s;
+  t->ndim = 2;
+}
+
+void load_tensor3d(struct Tensor *t, 
+    unsigned long d1, 
+    unsigned long d2, 
+    unsigned long d3,
+    unsigned long *offset, 
+    char *buffer) {
+  size_t dim = d1 * d2 * d3;
+  float *data = (float*)malloc(sizeof(float)*dim);
+
+  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
+  s[0] = d1;
+  s[1] = d2;
+  s[2] = d3;
+
+  for (size_t i=0; i<dim; i++) {
+    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
+  }
+  *offset += dim * sizeof(float);
+  t->data = data;
+  t->shape = s;
+  t->ndim = 3;
+}
+
+void load_tensor4d(struct Tensor *t, 
+    unsigned long d1, 
+    unsigned long d2, 
+    unsigned long d3,
+    unsigned long d4,
+    unsigned long *offset, 
+    char *buffer) {
+  size_t dim = d1 * d2;
+  float *data = (float*)malloc(sizeof(float)*dim);
+
+  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
+  s[0] = d1;
+  s[1] = d2;
+  s[2] = d3;
+  s[3] = d4;
+
+  for (size_t i=0; i<dim; i++) {
+    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
+  }
+  *offset += dim * sizeof(float);
+  t->data = data;
+  t->shape = s;
+  t->ndim = 4;
+}
+
 void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
-  int *conf_arr = (int *)malloc(sizeof(int) * *conf_sz);
+  unsigned int *conf_arr = (int *)malloc(sizeof(int) * *conf_sz);
   for (int i=0; i< *conf_sz; i++) {
-    conf_arr[i] = *((int*)(buffer + sizeof(int) + sizeof(int) * i));
+    conf_arr[i] = *((unsigned int*)(buffer + sizeof(int) + sizeof(int) * i));
   }
 
   // initialize config
@@ -116,12 +217,21 @@ void initialize_linear(struct Linear **layer) {
   (*layer)->b = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
-void initalize_ln(struct LayerNorm **ln) {
+void initialize_ln(struct LayerNorm **ln) {
   *ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
   (*ln)->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
   (*ln)->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
+void load_linear(struct Linear *layer, unsigned int d1, unsigned int d2, unsigned long *offset, char *buffer) {
+  load_tensor2d(layer->w, d1, d2, offset, buffer);
+  load_tensor1d(layer->b, d1, offset, buffer);
+}
+
+void load_ln(struct LayerNorm *layer, unsigned int d1, unsigned long *offset, char *buffer) {
+  load_tensor1d(layer->gamma, d1, offset, buffer);
+  load_tensor1d(layer->beta, d1, offset, buffer);
+}
 
 void initialize_parameters(struct RobertaModel *model) {
 
@@ -130,30 +240,32 @@ void initialize_parameters(struct RobertaModel *model) {
   model->embed->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   model->embed->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   model->embed->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  initalize_ln(&(model->embed->ln));
-  //model->embed->ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
-  //model->embed->ln->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
-  //model->embed->ln->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
+  initialize_ln(&(model->embed->ln));
   
   int n = model->config->n_hidden_layers;
 
   struct EncoderLayer *layers = (struct EncoderLayer*)malloc(n * sizeof(struct EncoderLayer));
 
   for (int i=0; i<n; i++) {
-    printf("inside");
     initialize_linear(&(layers[i].query));
     initialize_linear(&(layers[i].key));
     initialize_linear(&(layers[i].value));
+    initialize_linear(&(layers[i].output));
+    initialize_ln(&(layers[i].ln1));
     initialize_linear(&(layers[i].ff_in));
     initialize_linear(&(layers[i].ff_out));
-    initalize_ln(&(layers[i].ln));
+    initialize_ln(&(layers[i].ln2));
   }
 
   model->layers = layers;
-
+  model->clf = (struct Classifier*)malloc(sizeof(struct Classifier));
+  model->clf->pred_bias = (struct Tensor*)malloc(sizeof(struct Tensor));
+  initialize_linear(&(model->clf->transform_linear));
+  initialize_ln(&(model->clf->ln));
+  model->clf->decoder_weight = (struct Tensor*)malloc(sizeof(struct Tensor));
+  initialize_linear(&(model->clf->seq));
 }
 
- 
 
 void load_model(struct RobertaModel *model, const char *fname) {
   printf("%s: loading model from '%s'\n", __func__, fname);
@@ -173,6 +285,7 @@ void load_model(struct RobertaModel *model, const char *fname) {
   // get file size to load in memory
   file_size = lseek(fd, 0, SEEK_END);
   if (file_size == -1) { fprintf(stderr, "error getting file size\n"), close(fd); exit(EXIT_FAILURE); }
+  printf("model size = %lu\n", file_size);
 
   buffer = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
   if (buffer == MAP_FAILED) { printf("error mapping file to memory"); close(fd); exit(EXIT_FAILURE); }
@@ -187,47 +300,59 @@ void load_model(struct RobertaModel *model, const char *fname) {
   load_config(model->config, buffer, conf_sz);
   initialize_parameters(model);
 
-  cur_size = model->config->vocab_size * model->config->hidden_size;
   offset += sizeof(int) * (*conf_sz + 1);
-  load_tensor(model->embed->word_emb->data, cur_size, &offset, buffer);
+  load_tensor2d(model->embed->word_emb, 
+                model->config->vocab_size,
+                model->config->hidden_size,
+                &offset,
+                buffer);
   
-  cur_size = model->config->n_max_tokens * model->config->hidden_size;
-  load_tensor(model->embed->pos_emb->data, cur_size, &offset, buffer);
+  load_tensor2d(model->embed->pos_emb,
+                model->config->n_max_tokens,
+                model->config->hidden_size,
+                &offset,
+                buffer);
 
-  cur_size = 2 * model->config->hidden_size;
-  load_tensor(model->embed->tok_type_w->data, cur_size, &offset, buffer);
+  load_tensor2d(model->embed->tok_type_w,
+                2,
+                model->config->hidden_size,
+                &offset, buffer);
 
-  cur_size = model->config->hidden_size;
-  load_tensor(model->embed->ln->gamma->data, cur_size, &offset, buffer);
 
-  cur_size = model->config->hidden_size;
-  load_tensor(model->embed->ln->beta->data, cur_size, &offset, buffer);
+  load_ln(model->embed->ln, model->config->hidden_size, &offset, buffer);
 
   int n_layers = model->config->n_hidden_layers;
 
   for (int i=0; i<n_layers; i++) {
-    cur_size = model->config->hidden_size * model->config->hidden_size;
-    load_tensor(model->layers[i].query->w->data, cur_size, &offset, buffer);
+    load_linear(model->layers[i].query, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
+    load_linear(model->layers[i].key, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
+    load_linear(model->layers[i].value, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
+    load_linear(model->layers[i].output, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
 
-    cur_size = model->config->hidden_size;
-    load_tensor(model->layers[i].query->b->data, cur_size, &offset, buffer);
+    load_ln(model->layers[i].ln1, model->config->hidden_size, &offset, buffer);
 
-    cur_size = model->config->hidden_size * model->config->hidden_size;
-    load_tensor(model->layers[i].key->w->data, cur_size, &offset, buffer);
+    load_linear(model->layers[i].ff_in, model->config->intermediate_size, model->config->hidden_size, &offset, buffer);
+    load_linear(model->layers[i].ff_out, model->config->hidden_size, model->config->intermediate_size, &offset, buffer);
 
-    cur_size = model->config->hidden_size;
-    load_tensor(model->layers[i].key->b->data, cur_size, &offset, buffer);
-
-    cur_size = model->config->hidden_size * model->config->hidden_size;
-    load_tensor(model->layers[i].value->w->data, cur_size, &offset, buffer);
-
-    cur_size = model->config->hidden_size;
-    load_tensor(model->layers[i].key->b->data, cur_size, &offset, buffer);
+    load_ln(model->layers[i].ln2, model->config->hidden_size, &offset, buffer);
   }
 
-
+  printf("loaded layers, \n");
+  printf("model size     %lu\n", file_size);
+  printf("offset current %lu\n", offset);
+  load_tensor1d(model->clf->pred_bias, model->config->vocab_size, &offset, buffer);
+  printf("loaded bias \n");
+  printf("model size     %lu\n", file_size);
+  printf("offset current %lu\n", offset);
+  load_linear(model->clf->transform_linear, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
+  printf("loaded linear \n");
+  load_ln(model->clf->ln, model->config->hidden_size, &offset, buffer);
+  load_tensor2d(model->clf->decoder_weight, model->config->vocab_size, model->config->hidden_size, &offset, buffer);
+  load_linear(model->clf->seq, 2, model->config->hidden_size, &offset, buffer);
+  printf("model size     %lu\n", file_size);
+  printf("offset current %lu\n", offset);
+  
 }
-
 
 
 void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
@@ -256,6 +381,7 @@ void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
   fclose(file);
 }
 
+
 void free_tokenizer(Tokenizer* t) {
   for (int i=0; i<t->vocab_size; i++) { free(t->vocab[i]); }
   free(t->vocab);
@@ -263,15 +389,18 @@ void free_tokenizer(Tokenizer* t) {
   free(t->sorted_vocab);
 }
 
+
 int compare_tokens(const void *a, const void *b) {
   return strcmp(((TokenIndex*)a)->s, ((TokenIndex*)b)->s);
 }
+
 
 int str_lookup(char *s, TokenIndex *sorted_vocab, int vocab_size) {
   TokenIndex tok = { .s = s };
   TokenIndex *res = bsearch(&tok, sorted_vocab, vocab_size, sizeof(TokenIndex), compare_tokens);
   return res != NULL ? res->id : -1;
 }
+
 
 void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, int *n_tokens) {
   if (t->sorted_vocab == NULL) {
@@ -322,6 +451,7 @@ void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, i
   free(str_buffer);
 }
 
+
 char* decode(Tokenizer* t, int prev_token, int token) {
     char *piece = t->vocab[token];
     // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
@@ -334,8 +464,6 @@ char* decode(Tokenizer* t, int prev_token, int token) {
     }
     return piece;
 }
-
-
 
 
 void main() {
@@ -369,6 +497,16 @@ void main() {
   struct RobertaModel *model = malloc(sizeof(struct RobertaModel));
     
   load_model(model, "model.bin"); 
+
+  for (int i=0; i<5; i++) {
+    printf("%f\n", model->embed->word_emb->data[i]);
+  }
+
+  printf("\n");
+  
+  for (int i=0; i<5; i++) {
+    printf("%f\n", model->layers[0].key->w->data[i]);
+  }
   free_tokenizer(&tokenizer);
   printf("freed tokenizer\n");
 }

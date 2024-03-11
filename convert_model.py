@@ -78,15 +78,16 @@ class RobertaModel:
 
 def convert_model(path):
     model = torch.load(f'{path}/pytorch_model.bin')
-    print(model['bert.embeddings.word_embeddings.weight'])
     rev_config = {j:i for i,j in config.items()}
+    print(model['bert.embeddings.word_embeddings.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.0.attention.self.query.weight'].flatten()[:5])
     with open('model.bin', 'wb') as f:
         f.write(struct.pack('I', len(config)))
         for ck, cv in config.items():
             f.write(struct.pack('I', cv))
         for i, (k, v) in enumerate(model.items()):
             # if k.startswith('cls'): continue
-            print(i, k, v.shape)
+            # print(i, k, v.shape)
             # assert not any(ss is None for ss in s), f"failed in config creation {v.shape}, {config}"
             v.cpu().numpy().tofile(f)
 
