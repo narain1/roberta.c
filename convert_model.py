@@ -80,7 +80,25 @@ def convert_model(path):
     model = torch.load(f'{path}/pytorch_model.bin')
     rev_config = {j:i for i,j in config.items()}
     print(model['bert.embeddings.word_embeddings.weight'].flatten()[:5])
+    print(model['bert.embeddings.position_embeddings.weight'].flatten()[:5])
     print(model['bert.encoder.layer.0.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.embeddings.LayerNorm.gamma'].flatten()[:5])
+    print(model['bert.embeddings.LayerNorm.beta'].flatten()[:5])
+    print(model['bert.encoder.layer.0.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.1.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.2.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.3.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.4.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.5.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.6.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.7.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.8.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.9.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.10.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.encoder.layer.11.attention.self.query.weight'].flatten()[:5])
+    print(model['bert.pooler.dense.weight'].flatten()[:5])
+    print(model['cls.predictions.decoder.weight'].flatten()[:5])
+
     with open('model.bin', 'wb') as f:
         f.write(struct.pack('I', len(config)))
         for ck, cv in config.items():
