@@ -87,6 +87,7 @@ struct RobertaModel {
   struct ModelConfig *config;
   struct EmbeddingLayer *embed;
   struct EncoderLayer *layers;
+  struct Linear *pool;
   struct Classifier *clf;
 };
 
@@ -258,6 +259,7 @@ void initialize_parameters(struct RobertaModel *model) {
   }
 
   model->layers = layers;
+  initialize_linear(&(model->pool));
   model->clf = (struct Classifier*)malloc(sizeof(struct Classifier));
   model->clf->pred_bias = (struct Tensor*)malloc(sizeof(struct Tensor));
   initialize_linear(&(model->clf->transform_linear));
@@ -337,6 +339,7 @@ void load_model(struct RobertaModel *model, const char *fname) {
     load_ln(model->layers[i].ln2, model->config->hidden_size, &offset, buffer);
   }
 
+  load_linear(model->pool, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
   printf("loaded layers, \n");
   printf("model size     %lu\n", file_size);
   printf("offset current %lu\n", offset);
@@ -352,6 +355,85 @@ void load_model(struct RobertaModel *model, const char *fname) {
   printf("model size     %lu\n", file_size);
   printf("offset current %lu\n", offset);
   
+}
+
+void free_tensor(struct Tensor *tensor) {
+    if (tensor != NULL) {
+        if (tensor->data != NULL) {
+            free(tensor->data); 
+        }
+        if (tensor->shape != NULL) {
+            free(tensor->shape);
+        }
+        free(tensor); 
+    }
+}
+
+void free_linear(struct Linear *linear) {
+    if (linear != NULL) {
+        free_tensor(linear->w);
+        free_tensor(linear->b);
+        free(linear);
+    }
+}
+
+void free_ln(struct LayerNorm *ln) {
+    if (ln != NULL) {
+        free_tensor(ln->gamma);
+        free_tensor(ln->beta);
+        free(ln); 
+    }
+}
+
+void free_encoder_layers(struct EncoderLayer *layers, int n_layers) {
+    if (layers != NULL) {
+        for (int i = 0; i < n_layers; ++i) {
+            free_linear(layers[i].query);
+            free_linear(layers[i].key);
+            free_linear(layers[i].value);
+            free_linear(layers[i].output);
+            free_ln(layers[i].ln1);
+            free_linear(layers[i].ff_in);
+            free_linear(layers[i].ff_out);
+            free_ln(layers[i].ln2);
+        }
+        free(layers);
+    }
+}
+
+void free_embedding_layer(struct EmbeddingLayer *embed) {
+    if (embed != NULL) {
+        free_tensor(embed->word_emb);
+        free_tensor(embed->pos_emb);
+        free_tensor(embed->tok_type_w);
+        free_ln(embed->ln);
+        free(embed);
+    }
+}
+
+void free_classifier(struct Classifier *clf) {
+    if (clf != NULL) {
+        free_tensor(clf->pred_bias);
+        free_linear(clf->transform_linear);
+        free_ln(clf->ln);
+        free_tensor(clf->decoder_weight);
+        free_linear(clf->seq);
+        free(clf); 
+    }
+}
+
+void free_model(struct RobertaModel *model) {
+    if (model != NULL) {
+        if (model->config != NULL) {
+            free(model->config); 
+        }
+        free_embedding_layer(model->embed);
+        free_encoder_layers(model->layers, model->config->n_hidden_layers);
+        free_classifier(model->clf);
+        free_linear(model->pool);
+        free(model); 
+        printf("model is freed\n");
+    }
 }
 
 
@@ -387,6 +469,86 @@ void free_tokenizer(Tokenizer* t) {
   free(t->vocab);
   free(t->vocab_scores);
   free(t->sorted_vocab);
+}
+
+
+void print_tensor_shape(const char* name, struct Tensor *tensor) {
+    printf("%s shape: [", name);
+    for (unsigned int i = 0; i < tensor->ndim; ++i) {
+        printf("%u", tensor->shape[i]);
+        if (i < tensor->ndim - 1) {
+            printf(", ");
+        }
+    }
+    printf("]\n");
+}
+
+
+void print_model_tensors(const struct RobertaModel *model) {
+    // Print embedding layer tensors
+    print_tensor_shape("Word Embeddings", model->embed->word_emb);
+    print_tensor_shape("Position Embeddings", model->embed->pos_emb);
+    print_tensor_shape("Token Type Embeddings", model->embed->tok_type_w);
+    print_tensor_shape("Embedding LayerNorm Gamma", model->embed->ln->gamma);
+    print_tensor_shape("Embedding LayerNorm Beta", model->embed->ln->beta);
+
+    // Print encoder layer tensors
+    for (int i = 0; i < model->config->n_hidden_layers; ++i) {
+        char layer_prefix[64];
+        sprintf(layer_prefix, "Encoder Layer %d", i);
+
+        char tensor_name[128];
+
+        sprintf(tensor_name, "%s Query Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].query->w);
+        sprintf(tensor_name, "%s Query Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].query->b);
+
+        sprintf(tensor_name, "%s Key Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].key->w);
+        sprintf(tensor_name, "%s Key Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].key->b);
+
+        sprintf(tensor_name, "%s Value Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].value->w);
+        sprintf(tensor_name, "%s Value Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].value->b);
+
+        sprintf(tensor_name, "%s Output Dense Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].output->w);
+        sprintf(tensor_name, "%s Output Dense Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].output->b);
+
+        sprintf(tensor_name, "%s LayerNorm1 Gamma", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ln1->gamma);
+        sprintf(tensor_name, "%s LayerNorm1 Beta", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ln1->beta);
+
+        sprintf(tensor_name, "%s FFN Dense In Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ff_in->w);
+        sprintf(tensor_name, "%s FFN Dense In Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ff_in->b);
+
+        sprintf(tensor_name, "%s FFN Dense Out Weight", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ff_out->w);
+        sprintf(tensor_name, "%s FFN Dense Out Bias", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ff_out->b);
+
+        sprintf(tensor_name, "%s LayerNorm2 Gamma", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ln2->gamma);
+        sprintf(tensor_name, "%s LayerNorm2 Beta", layer_prefix);
+        print_tensor_shape(tensor_name, model->layers[i].ln2->beta);
+    }
+
+    // Print classifier layer tensors
+    print_tensor_shape("Classifier Pred Bias", model->clf->pred_bias);
+    print_tensor_shape("Classifier Transform Linear Weight", model->clf->transform_linear->w);
+    print_tensor_shape("Classifier Transform Linear Bias", model->clf->transform_linear->b);
+    print_tensor_shape("Classifier LayerNorm Gamma", model->clf->ln->gamma);
+    print_tensor_shape("Classifier LayerNorm Beta", model->clf->ln->beta);
+    print_tensor_shape("Classifier Decoder Weight", model->clf->decoder_weight);
+    print_tensor_shape("Classifier Seq Weight",model->clf->seq->w);
+    print_tensor_shape("Classifier Seq Bias", model->clf->seq->b);
 }
 
 
@@ -465,6 +627,13 @@ char* decode(Tokenizer* t, int prev_token, int token) {
     return piece;
 }
 
+void print_first_elements(struct Tensor *t) {
+  for (int i=0; i<5; i++) {
+    printf("%f ", t->data[i]);
+  }
+  printf("\n");
+}
+
 
 void main() {
   unsigned int vocab_size = 30522;
@@ -498,15 +667,28 @@ void main() {
     
   load_model(model, "model.bin"); 
 
-  for (int i=0; i<5; i++) {
-    printf("%f\n", model->embed->word_emb->data[i]);
-  }
+  print_first_elements(model->embed->word_emb);
+  print_first_elements(model->embed->pos_emb);
+  print_first_elements(model->embed->tok_type_w);
+  print_first_elements(model->embed->ln->gamma);
+  print_first_elements(model->embed->ln->beta);
+  print_first_elements(model->layers[0].query->w);
+  print_first_elements(model->layers[1].query->w);
+  print_first_elements(model->layers[2].query->w);
+  print_first_elements(model->layers[3].query->w);
+  print_first_elements(model->layers[4].query->w);
+  print_first_elements(model->layers[5].query->w);
+  print_first_elements(model->layers[6].query->w);
+  print_first_elements(model->layers[7].query->w);
+  print_first_elements(model->layers[8].query->w);
+  print_first_elements(model->layers[9].query->w);
+  print_first_elements(model->layers[10].query->w);
+  print_first_elements(model->layers[11].query->w);
+  print_first_elements(model->pool->w);
+  print_first_elements(model->clf->decoder_weight);
 
-  printf("\n");
-  
-  for (int i=0; i<5; i++) {
-    printf("%f\n", model->layers[0].key->w->data[i]);
-  }
+  // print_model_tensors(model);
   free_tokenizer(&tokenizer);
+  free_model(model);
   printf("freed tokenizer\n");
 }
