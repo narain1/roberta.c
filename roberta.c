@@ -667,26 +667,6 @@ void main() {
     
   load_model(model, "model.bin"); 
 
-  print_first_elements(model->embed->word_emb);
-  print_first_elements(model->embed->pos_emb);
-  print_first_elements(model->embed->tok_type_w);
-  print_first_elements(model->embed->ln->gamma);
-  print_first_elements(model->embed->ln->beta);
-  print_first_elements(model->layers[0].query->w);
-  print_first_elements(model->layers[1].query->w);
-  print_first_elements(model->layers[2].query->w);
-  print_first_elements(model->layers[3].query->w);
-  print_first_elements(model->layers[4].query->w);
-  print_first_elements(model->layers[5].query->w);
-  print_first_elements(model->layers[6].query->w);
-  print_first_elements(model->layers[7].query->w);
-  print_first_elements(model->layers[8].query->w);
-  print_first_elements(model->layers[9].query->w);
-  print_first_elements(model->layers[10].query->w);
-  print_first_elements(model->layers[11].query->w);
-  print_first_elements(model->pool->w);
-  print_first_elements(model->clf->decoder_weight);
-
   // print_model_tensors(model);
   free_tokenizer(&tokenizer);
   free_model(model);
