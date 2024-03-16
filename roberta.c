@@ -269,6 +269,14 @@ void initialize_parameters(struct RobertaModel *model) {
 }
 
 
+void initialize_buffer(struct Buffer *buffer) {
+  buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->tok_type = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
+}
+
+
 void load_model(struct RobertaModel *model, const char *fname) {
   printf("%s: loading model from '%s'\n", __func__, fname);
   
@@ -634,6 +642,67 @@ void print_first_elements(struct Tensor *t) {
   printf("\n");
 }
 
+void arange(int *arr, int low, int high) {
+  arr = (int *)malloc(sizeof(int) * abs(high - low));
+  int a = 0;
+  for (int i=low; i<high; i++) {
+    arr[a] = i;
+    a++;
+  }
+}
+
+void arr_zeros(int *arr, unsigned int size) {
+   arr = (int *)calloc(sizeof(int), size);
+}
+  
+void arr_ones(int *arr, unsigned int size) {
+  arr = (int *)malloc(sizeof(int) * size);
+}
+
+void map_embedding(float *data, 
+              struct Tensor *t2, 
+              struct ModelConfig *config,
+              int *tokens, 
+              int size) {
+  data = (float *)malloc(sizeof(float) * size);
+  int offset = 0, hidden_size = config->hidden_size;
+  for (int i=0; i<size; i++) {
+    memcpy(t2->data+(hidden_size * tokens[i] * sizeof(float)), data+(hidden_size * i), hidden_size);
+  }
+}
+
+struct Buffer {
+  Tensor *word_emb;
+  Tensor *pos_emb;
+  Tensor *tok_type_w;
+  Tensor *layer;
+}
+
+void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
+  struct Buffer *buffer;
+  struct Tensor buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  struct Tensor buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  struct Tensor buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  // load word embedding
+  map_embedding(
+      &(buffer->word_emb->data), 
+      &(model->embed->word_emb->data), 
+      &(model->config),
+      &tokens,
+      n_tokens);
+  // load positional embedding
+  int *index;
+  arange(*index, 0, n_tokens);
+  map_embedding(
+      &(buffer->pos_emb->data),
+      &(buffer->embed->pos_emb),
+      &(model=>config),
+      n_tokens);
+
+
+      
+
+}
 
 void main() {
   unsigned int vocab_size = 30522;
@@ -668,6 +737,7 @@ void main() {
   load_model(model, "model.bin"); 
 
   // print_model_tensors(model);
+
   free_tokenizer(&tokenizer);
   free_model(model);
   printf("freed tokenizer\n");
