@@ -1,4 +1,3 @@
-tokenizer exported
 0 bert.embeddings.word_embeddings.weight torch.Size([30522, 768])
 1 bert.embeddings.position_embeddings.weight torch.Size([512, 768])
 2 bert.embeddings.token_type_embeddings.weight torch.Size([2, 768])

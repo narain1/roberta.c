@@ -6,6 +6,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "Tensor.h"
+
 #define MAX_TOKENS 1000
 #define MAX_LENGTH 100
 
@@ -39,22 +41,6 @@ struct ModelConfig base_config = {
   .n_att_heads = 12,
   .vocab_size = 30522,
   .n_max_tokens = 512
-};
-
-struct Tensor {
-  float *data;
-  unsigned int *shape;
-  unsigned int ndim;
-};
-
-struct Linear {
-  struct Tensor *w;
-  struct Tensor *b;
-};
-
-struct LayerNorm {
-  struct Tensor *gamma;
-  struct Tensor *beta;
 };
 
 struct EmbeddingLayer {
@@ -91,13 +77,13 @@ struct RobertaModel {
   struct Classifier *clf;
 };
 
-size_t reduce_product(int *arr, int size) {
-    size_t product = 1;
-    for (int i = 0; i < size; i++) {
-        product *= (size_t)arr[i];
-    }
-    return product;
-}
+struct Buffer {
+  struct Tensor *word_emb;
+  struct Tensor *pos_emb;
+  struct Tensor *tok_type_w;
+  struct Tensor *layer;
+};
+
 
 void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
   data = (float*)malloc(sizeof(float) * size);
@@ -106,95 +92,6 @@ void load_tensor(float *data, const unsigned long size, unsigned long *offset, c
     data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
   }
   *offset += size; 
-}
-
-void load_tensor1d(struct Tensor *t, 
-    unsigned long d1, 
-    unsigned long *offset, 
-    char *buffer) {
-
-  size_t dim = (size_t)d1;
-  float *data = (float*)malloc(sizeof(float)*d1);
-  unsigned int  *s = (unsigned int*)malloc(sizeof(unsigned int));
-  *s = d1;
-  
-  for (size_t i=0; i<dim; i++) {
-    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
-  }
-  *offset += dim * sizeof(float);
-  t->data = data;
-  t->shape = s;
-  t->ndim = 1;
-}
-
-
-void load_tensor2d(struct Tensor *t, 
-    unsigned long d1,
-    unsigned long d2, 
-    unsigned long *offset, 
-    char *buffer) {
-  size_t dim = d1 * d2;
-  float *data = (float*)malloc(sizeof(float)*dim);
-  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
-
-  s[0] = d1;
-  s[1] = d2;
-  
-  for (size_t i=0; i<dim; i++) {
-    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
-  }
-  *offset += dim * sizeof(float);
-  t->data = data;
-  t->shape = s;
-  t->ndim = 2;
-}
-
-void load_tensor3d(struct Tensor *t, 
-    unsigned long d1, 
-    unsigned long d2, 
-    unsigned long d3,
-    unsigned long *offset, 
-    char *buffer) {
-  size_t dim = d1 * d2 * d3;
-  float *data = (float*)malloc(sizeof(float)*dim);
-
-  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
-  s[0] = d1;
-  s[1] = d2;
-  s[2] = d3;
-
-  for (size_t i=0; i<dim; i++) {
-    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
-  }
-  *offset += dim * sizeof(float);
-  t->data = data;
-  t->shape = s;
-  t->ndim = 3;
-}
-
-void load_tensor4d(struct Tensor *t, 
-    unsigned long d1, 
-    unsigned long d2, 
-    unsigned long d3,
-    unsigned long d4,
-    unsigned long *offset, 
-    char *buffer) {
-  size_t dim = d1 * d2;
-  float *data = (float*)malloc(sizeof(float)*dim);
-
-  unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
-  s[0] = d1;
-  s[1] = d2;
-  s[2] = d3;
-  s[3] = d4;
-
-  for (size_t i=0; i<dim; i++) {
-    data[i] = *((float *)(buffer + *offset + i * sizeof(float)));
-  }
-  *offset += dim * sizeof(float);
-  t->data = data;
-  t->shape = s;
-  t->ndim = 4;
 }
 
 void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
@@ -210,28 +107,6 @@ void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
   data->n_max_tokens = conf_arr[3];
   data->n_att_heads = conf_arr[4];
   data->n_hidden_layers = conf_arr[5];
-}
-
-void initialize_linear(struct Linear **layer) {
-  *layer = (struct Linear*)malloc(sizeof(struct Linear));
-  (*layer)->w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  (*layer)->b = (struct Tensor*)malloc(sizeof(struct Tensor));
-}
-
-void initialize_ln(struct LayerNorm **ln) {
-  *ln = (struct LayerNorm*)malloc(sizeof(struct LayerNorm));
-  (*ln)->gamma = (struct Tensor*)malloc(sizeof(struct Tensor));
-  (*ln)->beta = (struct Tensor*)malloc(sizeof(struct Tensor));
-}
-
-void load_linear(struct Linear *layer, unsigned int d1, unsigned int d2, unsigned long *offset, char *buffer) {
-  load_tensor2d(layer->w, d1, d2, offset, buffer);
-  load_tensor1d(layer->b, d1, offset, buffer);
-}
-
-void load_ln(struct LayerNorm *layer, unsigned int d1, unsigned long *offset, char *buffer) {
-  load_tensor1d(layer->gamma, d1, offset, buffer);
-  load_tensor1d(layer->beta, d1, offset, buffer);
 }
 
 void initialize_parameters(struct RobertaModel *model) {
@@ -272,7 +147,7 @@ void initialize_parameters(struct RobertaModel *model) {
 void initialize_buffer(struct Buffer *buffer) {
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
-  buffer->tok_type = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
@@ -365,34 +240,6 @@ void load_model(struct RobertaModel *model, const char *fname) {
   
 }
 
-void free_tensor(struct Tensor *tensor) {
-    if (tensor != NULL) {
-        if (tensor->data != NULL) {
-            free(tensor->data); 
-        }
-        if (tensor->shape != NULL) {
-            free(tensor->shape);
-        }
-        free(tensor); 
-    }
-}
-
-void free_linear(struct Linear *linear) {
-    if (linear != NULL) {
-        free_tensor(linear->w);
-        free_tensor(linear->b);
-        free(linear);
-    }
-}
-
-void free_ln(struct LayerNorm *ln) {
-    if (ln != NULL) {
-        free_tensor(ln->gamma);
-        free_tensor(ln->beta);
-        free(ln); 
-    }
-}
-
 void free_encoder_layers(struct EncoderLayer *layers, int n_layers) {
     if (layers != NULL) {
         for (int i = 0; i < n_layers; ++i) {
@@ -478,19 +325,6 @@ void free_tokenizer(Tokenizer* t) {
   free(t->vocab_scores);
   free(t->sorted_vocab);
 }
-
-
-void print_tensor_shape(const char* name, struct Tensor *tensor) {
-    printf("%s shape: [", name);
-    for (unsigned int i = 0; i < tensor->ndim; ++i) {
-        printf("%u", tensor->shape[i]);
-        if (i < tensor->ndim - 1) {
-            printf(", ");
-        }
-    }
-    printf("]\n");
-}
-
 
 void print_model_tensors(const struct RobertaModel *model) {
     // Print embedding layer tensors
@@ -635,72 +469,41 @@ char* decode(Tokenizer* t, int prev_token, int token) {
     return piece;
 }
 
-void print_first_elements(struct Tensor *t) {
-  for (int i=0; i<5; i++) {
-    printf("%f ", t->data[i]);
-  }
-  printf("\n");
-}
-
-void arange(int *arr, int low, int high) {
-  arr = (int *)malloc(sizeof(int) * abs(high - low));
-  int a = 0;
-  for (int i=low; i<high; i++) {
-    arr[a] = i;
-    a++;
-  }
-}
-
-void arr_zeros(int *arr, unsigned int size) {
-   arr = (int *)calloc(sizeof(int), size);
-}
-  
-void arr_ones(int *arr, unsigned int size) {
-  arr = (int *)malloc(sizeof(int) * size);
-}
-
-void map_embedding(float *data, 
-              struct Tensor *t2, 
-              struct ModelConfig *config,
-              int *tokens, 
-              int size) {
-  data = (float *)malloc(sizeof(float) * size);
-  int offset = 0, hidden_size = config->hidden_size;
-  for (int i=0; i<size; i++) {
-    memcpy(t2->data+(hidden_size * tokens[i] * sizeof(float)), data+(hidden_size * i), hidden_size);
-  }
-}
-
-struct Buffer {
-  Tensor *word_emb;
-  Tensor *pos_emb;
-  Tensor *tok_type_w;
-  Tensor *layer;
-}
-
 void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
   struct Buffer *buffer;
-  struct Tensor buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
-  struct Tensor buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
-  struct Tensor buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
   // load word embedding
-  map_embedding(
-      &(buffer->word_emb->data), 
-      &(model->embed->word_emb->data), 
-      &(model->config),
-      &tokens,
+  map_embeddings(
+      buffer->word_emb, 
+      model->embed->word_emb, 
+      model->config->hidden_size,
+      tokens,
       n_tokens);
   // load positional embedding
   int *index;
-  arange(*index, 0, n_tokens);
-  map_embedding(
-      &(buffer->pos_emb->data),
-      &(buffer->embed->pos_emb),
-      &(model=>config),
+  arange(&(index), 0, n_tokens);
+
+  map_embeddings(
+      buffer->pos_emb,
+      model->embed->pos_emb,
+      model->config->hidden_size,
+      index,
       n_tokens);
 
+  int *tok_index;
+  arr_zeros(&(tok_index), n_tokens);
+  map_embeddings(
+    buffer->tok_type_w,
+    model->embed->tok_type_w,
+    model->config->hidden_size,
+    tok_index,
+    n_tokens);
 
-      
+  sum_tensors(buffer->word_emb, buffer->pos_emb, buffer->layer);
+  sum_tensors_inplace(buffer->layer, buffer->tok_type_w);
 
 }
 
@@ -735,6 +538,8 @@ void main() {
   struct RobertaModel *model = malloc(sizeof(struct RobertaModel));
     
   load_model(model, "model.bin"); 
+
+  forward(model, prompt_tokens, num_prompt_tokens);
 
   // print_model_tensors(model);
 
