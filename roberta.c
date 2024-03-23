@@ -177,7 +177,7 @@ void load_model(struct RobertaModel *model, const char *fname) {
   close(fd);
   
   int *conf_sz = (int*)buffer;
-  printf("config size %d\n", *conf_sz);
+  // printf("config size %d\n", *conf_sz);
 
   int *conf_arr = (int *)malloc(sizeof(int) * *conf_sz);
   model->config = (struct ModelConfig*)malloc(sizeof(struct ModelConfig));
@@ -223,21 +223,23 @@ void load_model(struct RobertaModel *model, const char *fname) {
   }
 
   load_linear(model->pool, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
-  printf("loaded layers, \n");
-  printf("model size     %lu\n", file_size);
-  printf("offset current %lu\n", offset);
+  // printf("loaded layers, \n");
+  // printf("model size     %lu\n", file_size);
+  // printf("offset current %lu\n", offset);
   load_tensor1d(model->clf->pred_bias, model->config->vocab_size, &offset, buffer);
-  printf("loaded bias \n");
-  printf("model size     %lu\n", file_size);
-  printf("offset current %lu\n", offset);
+  // printf("loaded bias \n");
+  // printf("model size     %lu\n", file_size);
+  // printf("offset current %lu\n", offset);
   load_linear(model->clf->transform_linear, model->config->hidden_size, model->config->hidden_size, &offset, buffer);
-  printf("loaded linear \n");
+  // printf("loaded linear \n");
   load_ln(model->clf->ln, model->config->hidden_size, &offset, buffer);
   load_tensor2d(model->clf->decoder_weight, model->config->vocab_size, model->config->hidden_size, &offset, buffer);
   load_linear(model->clf->seq, 2, model->config->hidden_size, &offset, buffer);
-  printf("model size     %lu\n", file_size);
-  printf("offset current %lu\n", offset);
-  
+  // printf("model size     %lu\n", file_size);
+  // printf("offset current %lu\n", offset);
+  if (file_size == offset) {
+    printf("model loaded successfully\n");
+  }
 }
 
 void free_encoder_layers(struct EncoderLayer *layers, int n_layers) {
@@ -279,15 +281,14 @@ void free_classifier(struct Classifier *clf) {
 
 void free_model(struct RobertaModel *model) {
     if (model != NULL) {
-        if (model->config != NULL) {
-            free(model->config); 
-        }
+       // if (model->config != NULL) {
+       //     free(model->config); 
+       // }
         free_embedding_layer(model->embed);
         free_encoder_layers(model->layers, model->config->n_hidden_layers);
         free_classifier(model->clf);
         free_linear(model->pool);
         free(model); 
-        printf("model is freed\n");
     }
 }
 
@@ -324,6 +325,8 @@ void free_tokenizer(Tokenizer* t) {
   free(t->vocab);
   free(t->vocab_scores);
   free(t->sorted_vocab);
+
+  printf("tokenizer freed\n");
 }
 
 void print_model_tensors(const struct RobertaModel *model) {
@@ -470,7 +473,7 @@ char* decode(Tokenizer* t, int prev_token, int token) {
 }
 
 void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
-  struct Buffer *buffer;
+  struct Buffer *buffer = (struct Buffer*)malloc(sizeof(struct Buffer));
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
@@ -493,17 +496,31 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
       index,
       n_tokens);
 
-  int *tok_index;
-  arr_zeros(&(tok_index), n_tokens);
-  map_embeddings(
-    buffer->tok_type_w,
-    model->embed->tok_type_w,
-    model->config->hidden_size,
-    tok_index,
-    n_tokens);
+  printf("starting inplace addition\n");
+  print_first_elements(buffer->word_emb);
+  sum_tensors_inplace(buffer->word_emb, buffer->pos_emb);
+  print_first_elements(buffer->word_emb);
 
-  sum_tensors(buffer->word_emb, buffer->pos_emb, buffer->layer);
-  sum_tensors_inplace(buffer->layer, buffer->tok_type_w);
+  // int *tok_index;
+  // arr_zeros(&(tok_index), n_tokens);
+  // map_embeddings(
+  //   buffer->tok_type_w,
+    // model->embed->tok_type_w,
+    // model->config->hidden_size,
+    // // tok_index,
+    // n_tokens);
+
+  // printf("word embeddings");
+  // print_first_elements(buffer->word_emb);
+  // printf("positional embeddings: ");
+  // print_first_elements(buffer->pos_emb);
+  // sum_tensors_inplace(buffer->word_emb, buffer->pos_emb);
+  // printf("checking inplace addition \n");
+  // print_first_elements(buffer->word_emb);
+  // printf("return 1\n");
+
+  // sum_tensors_inplace(buffer->word_emb, buffer->tok_type_w);
+  // print_first_elements(buffer->word_emb);
 
 }
 
@@ -537,12 +554,14 @@ void main() {
 
   struct RobertaModel *model = malloc(sizeof(struct RobertaModel));
     
+  printf("\n\n\n\n");
   load_model(model, "model.bin"); 
 
   forward(model, prompt_tokens, num_prompt_tokens);
 
   // print_model_tensors(model);
 
+  printf("execution completed\n");
   free_tokenizer(&tokenizer);
   free_model(model);
   printf("freed tokenizer\n");

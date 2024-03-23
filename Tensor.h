@@ -98,6 +98,6 @@ void sum_tensors(
 
 void sum_tensors_inplace(
     struct Tensor *a,
-    struct Tensor *b);
+    const struct Tensor *b);
     
 #endif // HELPER_H

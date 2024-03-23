@@ -11,6 +11,7 @@ add_library(Tensor STATIC Tensor.c)
 target_include_directories(Tensor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Add executable target with source files
+# add_executable(Roberta roberta.c Tensor.c)
 add_executable(Roberta roberta.c Tensor.c)
 add_compile_options(
             -Wall
@@ -19,5 +20,6 @@ add_compile_options(
             -Wcast-qual
             -Wno-unused-function
             -mavx
-        )
+      )
+
 target_link_libraries(Roberta Tensor)

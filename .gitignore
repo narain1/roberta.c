@@ -3,3 +3,6 @@ model/
 *.pth
 *.json
 *.out
+build/
+Roberta
+output.txt

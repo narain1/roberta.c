@@ -358,10 +358,9 @@ void sum_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* 
     for (unsigned int i = 0; i < result->size; i++) {
         result->data[i] = a->data[i] + b->data[i];
     }
-    printf("tensor addition completed \n");
 }
 
-void sum_tensors_inplace(struct Tensor* a, const struct Tensor* b) {
+void sum_tensors_inplace(struct Tensor *a, const struct Tensor *b) {
     if (a->ndim != b->ndim) {
         printf("Error: Tensors must have the same number of dimensions for in-place operation.\n");
         return;
@@ -375,11 +374,6 @@ void sum_tensors_inplace(struct Tensor* a, const struct Tensor* b) {
         }
     }
 
-    // Perform in-place addition
-    printf("starting inplace addition\n");
-    for (int i=0; i<10; i++) {
-      printf("%f %f\n", a->data[i], b->data[i]);
-    }
     for (size_t i = 0; i < a->size; i++) {
         a->data[i] += b->data[i];
     }
