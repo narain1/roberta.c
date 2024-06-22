@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <immintrin.h>
-#include "omp.h"
+#include <omp.h>
 
 
 typedef float afloat __attribute__ ((__aligned__(256)));
@@ -176,7 +176,7 @@ void free_ln(struct LayerNorm *ln) {
 }
 
 
-void print_tensor_shape(const char* name, struct Tensor *tensor) {
+void print_tensor_shape(const char* name, const struct Tensor *tensor) {
     printf("%s shape: [", name);
     for (unsigned int i = 0; i < tensor->ndim; ++i) {
         printf("%u", tensor->shape[i]);
@@ -219,7 +219,8 @@ void map_embeddings(struct Tensor *t1,
               int hidden_size,
               int *tokens, 
               int n_tokens) {
-  float *data = (float *)malloc(sizeof(float) * n_tokens * hidden_size);
+  size_t dim = n_tokens * hidden_size;
+  float *data = (float *)malloc(sizeof(float) * dim);
   unsigned int *s = (unsigned int*)malloc(sizeof(unsigned int) * 2);
 
   s[0] = hidden_size;
@@ -231,6 +232,7 @@ void map_embeddings(struct Tensor *t1,
   t1->data = data;
   t1->shape = s;
   t1->ndim = 2;
+  t1->size = dim;
 }
 
 inline void matmul_dot_inner(
@@ -378,3 +380,163 @@ void sum_tensors_inplace(struct Tensor *a, const struct Tensor *b) {
         a->data[i] += b->data[i];
     }
 }
+
+void sub_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match.\n");
+            return;
+        }
+    }
+
+    // Initialize result tensor
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    if (!result->shape) {
+        printf("Error: Failed to allocate memory for tensor shape.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < result->ndim; i++) {
+        result->shape[i] = a->shape[i]; // Correctly copy the shape values
+    }
+    result->size = a->size;
+    result->data = (float*)malloc(result->size * sizeof(float)); // 32-byte alignment for AVX
+
+    for (unsigned int i = 0; i < result->size; i++) {
+        result->data[i] = a->data[i] - b->data[i];
+    }
+}
+
+void sub_tensors_inplace(struct Tensor *a, const struct Tensor *b) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions for in-place operation.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match for in-place operation.\n");
+            print_tensor_shape("a: ", a);
+            print_tensor_shape("b: ", b);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < a->size; i++) {
+        a->data[i] -= b->data[i];
+    }
+}
+
+
+void mul_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match.\n");
+            return;
+        }
+    }
+
+    // Initialize result tensor
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    if (!result->shape) {
+        printf("Error: Failed to allocate memory for tensor shape.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < result->ndim; i++) {
+        result->shape[i] = a->shape[i]; // Correctly copy the shape values
+    }
+    result->size = a->size;
+    result->data = (float*)malloc(result->size * sizeof(float)); // 32-byte alignment for AVX
+
+    for (unsigned int i = 0; i < result->size; i++) {
+        result->data[i] = a->data[i] * b->data[i];
+    }
+}
+
+void mul_tensors_inplace(struct Tensor *a, const struct Tensor *b) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions for in-place operation.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match for in-place operation.\n");
+            print_tensor_shape("a: ", a);
+            print_tensor_shape("b: ", b);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < a->size; i++) {
+        a->data[i] *= b->data[i];
+    }
+}
+
+
+void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match.\n");
+            return;
+        }
+    }
+
+    // Initialize result tensor
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    if (!result->shape) {
+        printf("Error: Failed to allocate memory for tensor shape.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < result->ndim; i++) {
+        result->shape[i] = a->shape[i]; // Correctly copy the shape values
+    }
+    result->size = a->size;
+    result->data = (float*)malloc(result->size * sizeof(float)); // 32-byte alignment for AVX
+
+    for (unsigned int i = 0; i < result->size; i++) {
+        if (b->data[i] == 0) {
+            printf("Error: Division by zero at index %u.\n", i);
+            result->data[i] = 0; // Handle division by zero appropriately
+        } else {
+            result->data[i] = a->data[i] / b->data[i];
+        }
+    }
+}
+
+void div_tensors_inplace(struct Tensor *a, const struct Tensor *b) {
+    if (a->ndim != b->ndim) {
+        printf("Error: Tensors must have the same number of dimensions for in-place operation.\n");
+        return;
+    }
+    for (unsigned int i = 0; i < a->ndim; i++) {
+        if (a->shape[i] != b->shape[i]) {
+            printf("Error: Tensor shapes must match for in-place operation.\n");
+            print_tensor_shape("a: ", a);
+            print_tensor_shape("b: ", b);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < a->size; i++) {
+        if (b->data[i] == 0) {
+            printf("Error: Division by zero at index %zu.\n", i);
+            a->data[i] = 0; // Handle division by zero appropriately
+        } else {
+            a->data[i] /= b->data[i];
+        }
+    }
+}
+

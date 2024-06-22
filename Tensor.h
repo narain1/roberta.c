@@ -72,7 +72,7 @@ void free_linear(struct Linear *layer);
 
 void free_ln(struct LayerNorm *ln);
 
-void print_tensor_shape(const char *name, struct Tensor *tensor);
+void print_tensor_shape(const char *name, const struct Tensor *tensor);
 
 void print_first_elements(struct Tensor *t);
 
@@ -91,13 +91,17 @@ void map_embeddings(
 
 struct Tensor create_tensor(unsigned int *shape, unsigned int ndim);
 
-void sum_tensors(
-    const struct Tensor *a,
-    const struct Tensor *b,
-    struct Tensor *result);
+void sum_tensors(const struct Tensor *a, const struct Tensor *b, struct Tensor *result);
 
-void sum_tensors_inplace(
-    struct Tensor *a,
-    const struct Tensor *b);
+void sum_tensors_inplace(struct Tensor *a, const struct Tensor *b);
     
+void sub_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
+void sub_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+
+void mul_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
+void mul_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+
+void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
+void div_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+
 #endif // HELPER_H

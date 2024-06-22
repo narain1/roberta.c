@@ -496,31 +496,18 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
       index,
       n_tokens);
 
-  printf("starting inplace addition\n");
-  print_first_elements(buffer->word_emb);
   sum_tensors_inplace(buffer->word_emb, buffer->pos_emb);
-  print_first_elements(buffer->word_emb);
 
-  // int *tok_index;
-  // arr_zeros(&(tok_index), n_tokens);
-  // map_embeddings(
-  //   buffer->tok_type_w,
-    // model->embed->tok_type_w,
-    // model->config->hidden_size,
-    // // tok_index,
-    // n_tokens);
+  int *tok_index;
+  arr_zeros(&(tok_index), n_tokens);
+  map_embeddings(
+    buffer->tok_type_w,
+    model->embed->tok_type_w,
+    model->config->hidden_size,
+    tok_index,
+    n_tokens);
 
-  // printf("word embeddings");
-  // print_first_elements(buffer->word_emb);
-  // printf("positional embeddings: ");
-  // print_first_elements(buffer->pos_emb);
-  // sum_tensors_inplace(buffer->word_emb, buffer->pos_emb);
-  // printf("checking inplace addition \n");
-  // print_first_elements(buffer->word_emb);
-  // printf("return 1\n");
-
-  // sum_tensors_inplace(buffer->word_emb, buffer->tok_type_w);
-  // print_first_elements(buffer->word_emb);
+  sum_tensors_inplace(buffer->word_emb, buffer->tok_type_w);
 
 }
 

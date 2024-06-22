@@ -20,6 +20,7 @@ add_compile_options(
             -Wcast-qual
             -Wno-unused-function
             -mavx
+            -fopenmp
       )
 
 target_link_libraries(Roberta Tensor)
