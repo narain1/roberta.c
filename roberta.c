@@ -84,7 +84,6 @@ struct Buffer {
   struct Tensor *layer;
 };
 
-
 void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
   data = (float*)malloc(sizeof(float) * size);
   printf("size of offset is %lu %lu\n", *offset, size);
@@ -143,14 +142,12 @@ void initialize_parameters(struct RobertaModel *model) {
   initialize_linear(&(model->clf->seq));
 }
 
-
 void initialize_buffer(struct Buffer *buffer) {
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
-
 
 void load_model(struct RobertaModel *model, const char *fname) {
   printf("%s: loading model from '%s'\n", __func__, fname);
@@ -292,7 +289,6 @@ void free_model(struct RobertaModel *model) {
     }
 }
 
-
 void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
   t->vocab_size = vocab_size;
   t->vocab = (char**)malloc(vocab_size * sizeof(char*));
@@ -318,7 +314,6 @@ void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
   }
   fclose(file);
 }
-
 
 void free_tokenizer(Tokenizer* t) {
   for (int i=0; i<t->vocab_size; i++) { free(t->vocab[i]); }
@@ -396,18 +391,15 @@ void print_model_tensors(const struct RobertaModel *model) {
     print_tensor_shape("Classifier Seq Bias", model->clf->seq->b);
 }
 
-
 int compare_tokens(const void *a, const void *b) {
   return strcmp(((TokenIndex*)a)->s, ((TokenIndex*)b)->s);
 }
-
 
 int str_lookup(char *s, TokenIndex *sorted_vocab, int vocab_size) {
   TokenIndex tok = { .s = s };
   TokenIndex *res = bsearch(&tok, sorted_vocab, vocab_size, sizeof(TokenIndex), compare_tokens);
   return res != NULL ? res->id : -1;
 }
-
 
 void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, int *n_tokens) {
   if (t->sorted_vocab == NULL) {
@@ -458,7 +450,6 @@ void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, i
   free(str_buffer);
 }
 
-
 char* decode(Tokenizer* t, int prev_token, int token) {
     char *piece = t->vocab[token];
     // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
@@ -496,7 +487,7 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
       index,
       n_tokens);
 
-  sum_tensors_inplace(buffer->word_emb, buffer->pos_emb);
+  _sum_tensors(buffer->word_emb, buffer->pos_emb);
 
   int *tok_index;
   arr_zeros(&(tok_index), n_tokens);
@@ -507,7 +498,11 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
     tok_index,
     n_tokens);
 
-  sum_tensors_inplace(buffer->word_emb, buffer->tok_type_w);
+  _sum_tensors(buffer->word_emb, buffer->tok_type_w);
+
+  print_tensor_shape("word embedding", buffer->word_emb);
+  print_tensor_shape("embeding norm", model->embed->ln->gamma);
+
 
 }
 
