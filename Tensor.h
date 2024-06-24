@@ -2,6 +2,9 @@
 #define HELPER_H
 #include <stdalign.h>
 
+#define FLT_MAX 3.402823466e+38F /* max value */
+#define FLT_MIN 1.175494351e-38F /* min positive value */
+
 struct Tensor {
   alignas(32) float *data;
   unsigned int *shape;
@@ -76,6 +79,8 @@ void print_tensor_shape(const char *name, const struct Tensor *tensor);
 
 void print_first_elements(struct Tensor *t);
 
+void print_tensor(const struct Tensor *t);
+
 void arange(int **arr, int low, int high);
 
 void arr_zeros(int **arr, unsigned int size);
@@ -90,18 +95,32 @@ void map_embeddings(
     int n_tokens);
 
 struct Tensor create_tensor(unsigned int *shape, unsigned int ndim);
+struct Tensor rand_tensor(unsigned int *shape, unsigned int ndim);
 
 void sum_tensors(const struct Tensor *a, const struct Tensor *b, struct Tensor *result);
-
-void sum_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+void _sum_tensors(struct Tensor *a, const struct Tensor *b);
     
 void sub_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
-void sub_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+void _sub_tensors(struct Tensor *a, const struct Tensor *b);
 
 void mul_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
-void mul_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+void _mul_tensors(struct Tensor *a, const struct Tensor *b);
 
 void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
-void div_tensors_inplace(struct Tensor *a, const struct Tensor *b);
+void _div_tensors(struct Tensor *a, const struct Tensor *b);
 
+float reduce_sum(struct Tensor *t);
+struct Tensor reduce_sum_axis(const struct Tensor *a, unsigned int axis);
+
+float tensor_max(const struct Tensor *t);
+struct Tensor reduce_max_axis(const struct Tensor *a, unsigned int axis);
+
+float tensor_min(const struct Tensor *t);
+struct Tensor reduce_min_axis(const struct Tensor *a, unsigned int axis);
+
+float tensor_mean(const struct Tensor *a);
+struct Tensor reduce_mean_axis(const  struct Tensor *a, unsigned int axis); 
+
+float tensor_std(const struct Tensor *a);
+struct Tensor reduce_std_axis(const struct Tensor *a, unsigned int axis);
 #endif // HELPER_H
