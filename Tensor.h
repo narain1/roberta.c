@@ -99,12 +99,16 @@ struct Tensor rand_tensor(unsigned int *shape, unsigned int ndim);
 
 void sum_tensors(const struct Tensor *a, const struct Tensor *b, struct Tensor *result);
 void _sum_tensors(struct Tensor *a, const struct Tensor *b);
+void sum_tensors_broadcast(const struct Tensor *a, const struct Tensor *b, struct Tensor *result);
+void _sum_tensors_broadcast(struct Tensor *a, const struct Tensor *b);
+void _sum_tensor_scaler(struct Tensor *a, float scaler);
     
 void sub_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
 void _sub_tensors(struct Tensor *a, const struct Tensor *b);
 
 void mul_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
 void _mul_tensors(struct Tensor *a, const struct Tensor *b);
+void _mul_tensor_scaler(struct Tensor *a, float scaler);
 
 void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
 void _div_tensors(struct Tensor *a, const struct Tensor *b);
@@ -123,4 +127,8 @@ struct Tensor reduce_mean_axis(const  struct Tensor *a, unsigned int axis);
 
 float tensor_std(const struct Tensor *a);
 struct Tensor reduce_std_axis(const struct Tensor *a, unsigned int axis);
+
+void mm_f32(const struct Tensor *a, const struct Tensor *b, struct Tensor *c);
+
+void transpose_tensor(const struct Tensor *inp, struct Tensor *out);
 #endif // HELPER_H

@@ -11,7 +11,8 @@
 #define MAX_TOKENS 1000
 #define MAX_LENGTH 100
 
-typedef struct {
+typedef struct 
+{
   char *s;
   int id;
 } TokenIndex;
@@ -81,7 +82,9 @@ struct Buffer {
   struct Tensor *word_emb;
   struct Tensor *pos_emb;
   struct Tensor *tok_type_w;
-  struct Tensor *layer;
+  struct Tensor *layer_q;
+  struct Tensor *layer_k;
+  struct Tensor *layer_v;
 };
 
 void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
@@ -146,7 +149,9 @@ void initialize_buffer(struct Buffer *buffer) {
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer_q = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer_k = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer_v = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
 void load_model(struct RobertaModel *model, const char *fname) {
@@ -463,12 +468,73 @@ char* decode(Tokenizer* t, int prev_token, int token) {
     return piece;
 }
 
+void ln_forward(struct LayerNorm *ln, struct Tensor *inp, unsigned int axis, float eps)
+{
+  if (axis >= inp->ndim) {
+    printf("Error exis %u is out of bounds for tensor with %u dimensions. \n", axis, inp->ndim);
+    return;
+  }
+
+  struct Tensor mean_tensor = reduce_mean_axis(inp, axis);
+  printf("mean computed\n");
+  print_tensor(&mean_tensor);
+  struct Tensor std_tensor = reduce_std_axis(inp, axis);
+  print_tensor(&std_tensor);
+  printf("std computed\n");
+
+  for (unsigned long i=0; i<inp->size; ++i) {
+    int idx[4] = {0};
+    int temp = i;
+
+    for (int d=inp->ndim - 1; d >= 0; --d) {
+      idx[d] = temp % inp->shape[d];
+      temp /= inp->shape[d];
+    }
+
+    int result_idx = 0;
+    for (unsigned int d=0; d < inp->ndim; ++d) {
+      if (d != axis) {
+        result_idx += result_idx * inp->shape[d] + idx[d];
+      }
+    }
+
+    float mean = mean_tensor.data[result_idx];
+    float std = std_tensor.data[result_idx];
+    float norm = (inp->data[i] - mean) / (std + eps);
+
+    unsigned long gamma_idx = idx[axis];
+    inp->data[i] = ln->gamma->data[gamma_idx] * norm + ln->beta->data[gamma_idx];
+  }
+
+  free_tensor(&mean_tensor);
+  free_tensor(&std_tensor);
+}
+
+void linear_forward(struct Linear *l, struct Tensor *x, struct Tensor *o)
+{
+  struct Tensor temp;
+  transpose_tensor(x, &temp);
+
+  if (temp.shape[x->ndim - 1] != l->w->shape[0]) {
+    printf("error: Input dimensions do not match weight dimensions. \n");
+    return;
+  }
+
+  mm_f32(&temp, l->w, o);
+  free_tensor(&temp);
+  print_tensor_shape("mm intermediate", o);
+  _sum_tensors_broadcast(o, l->b);
+}
+  
+
 void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
   struct Buffer *buffer = (struct Buffer*)malloc(sizeof(struct Buffer));
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
-  buffer->layer = (struct Tensor*)malloc(sizeof(struct Tensor));
+  buffer->layer_q = (struct Tensor*)malloc(sizeof(struct Tensor)); 
+  buffer->layer_k = (struct Tensor*)malloc(sizeof(struct Tensor)); 
+  buffer->layer_v = (struct Tensor*)malloc(sizeof(struct Tensor)); 
   // load word embedding
   map_embeddings(
       buffer->word_emb, 
@@ -500,10 +566,16 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
 
   _sum_tensors(buffer->word_emb, buffer->tok_type_w);
 
-  print_tensor_shape("word embedding", buffer->word_emb);
-  print_tensor_shape("embeding norm", model->embed->ln->gamma);
-
-
+  ln_forward(model->embed->ln, buffer->word_emb, 1, 1.0f/100000);
+  // for (int n=0; n<model->config->n_hidden_layers; n++) {
+  for (int n=0; n<1; n++) {
+    print_tensor_shape("query weight_shape", model->layers[n].query->w);
+    print_tensor_shape("query_input_shape", buffer->word_emb);
+    linear_forward(model->layers[n].query, buffer->word_emb, buffer->layer_q);
+    linear_forward(model->layers[n].key, buffer->word_emb, buffer->layer_k);
+    linear_forward(model->layers[n].value, buffer->word_emb, buffer->layer_v);
+  }
+  print_tensor(buffer->layer_q);
 }
 
 void main() {
@@ -513,7 +585,7 @@ void main() {
   char *model_path = "model.bin";
   build_tokenizer(&tokenizer, tokenizer_path, vocab_size);
   printf("loaded tokenizer\n");
-  char *prompt = "Buying a mattress online can be a waking nightmare, and picking the wrong one can literally cause bad dreams or kill your back. It doesn't help that the online market is flooded with options or that there are more dedicated mattress review sites than stars in the sky.";
+  char *prompt = "Buying a mattress online can be a waking nightmare, ";
   int num_prompt_tokens = 0;
   int *prompt_tokens = (int*)malloc((strlen(prompt)+3)*sizeof(int));
   bpe_encode(&tokenizer, prompt, 0, 2, prompt_tokens, &num_prompt_tokens);

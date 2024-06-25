@@ -21,6 +21,7 @@ add_compile_options(
             -Wno-unused-function
             -mavx
             -fopenmp
+            -lm
       )
 
 target_link_libraries(Roberta Tensor)
