@@ -107,7 +107,10 @@ def convert_model(path):
             # if k.startswith('cls'): continue
             # print(i, k, v.shape)
             # assert not any(ss is None for ss in s), f"failed in config creation {v.shape}, {config}"
-            v.cpu().numpy().tofile(f)
+            if "embeddings" not in k and len(v.shape) == 2:
+                v.cpu().T.numpy().tofile(f)
+            else:
+                v.cpu().numpy().tofile(f)
 
 def test_model():
     with open('model.bin', 'rb') as f:

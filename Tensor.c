@@ -245,8 +245,8 @@ inline void print_tensor_shape(const char* name, const struct Tensor *tensor)
     printf("]\n");
 }
 
-
-void print_tensor(const struct Tensor *tensor) {
+void print_tensor(const struct Tensor *tensor) 
+{
     if (tensor->ndim == 1) {
         for (unsigned int i = 0; i < tensor->shape[0]; ++i) {
             if (i >= 5 && i < tensor->shape[0] - 5) {
@@ -331,6 +331,7 @@ void print_tensor(const struct Tensor *tensor) {
         printf("Printing for tensors with ndim > 4 is not implemented.\n");
     }
 }
+
 inline void arange(int **arr, int low, int high) 
 {
   *arr = (int *)malloc(sizeof(int) * abs(high - low));
@@ -352,7 +353,6 @@ inline void arr_ones(int **arr, unsigned int size)
     (*arr)[i] = 1;
   }
 }
-
 
 inline void print_first_elements(struct Tensor *t) 
 {
@@ -383,42 +383,14 @@ inline void map_embeddings(struct Tensor *t1,
   t1->ndim = 2;
   t1->size = dim;
 }
-//
-//inline void mm_f32(struct Tensor *a, struct Tensor *b, struct Tensor *c) 
-//{
-//    int a_rows = a->shape[0];
-//    int a_cols = a->shape[1];
-//    int b_rows = b->shape[0];
-//    int b_cols = b->shape[1];
-//
-//    // Assert that the number of columns in A matches the number of rows in B
-//    assert(a_cols == b_rows && "Number of columns in A must match the number of rows in B");
-//
-//    int i, j, k, i1, j1, k1;
-//
-//    #pragma omp parallel for private(i, j, k, i1, j1, k1) shared(a, b, c, a_rows, a_cols, b_cols) schedule(dynamic)
-//    for (i = 0; i < a_rows; i += TILE_SIZE) {
-//        for (j = 0; j < b_cols; j += TILE_SIZE) {
-//            for (k = 0; k < a_cols; k += TILE_SIZE) {
-//                // Process a block/tile
-//                for (i1 = i; i1 < i + TILE_SIZE && i1 < a_rows; i1++) {
-//                    for (j1 = j; j1 < j + TILE_SIZE && j1 < b_cols; j1++) {
-//                        float sum = 0.0f;
-//                        for (k1 = k; k1 < k + TILE_SIZE && k1 < a_cols; k1++) {
-//                            sum += a->data[i1 * a_cols + k1] * b->data[k1 * b_cols + j1];
-//                        }
-//                        #pragma omp atomic
-//                        c->data[i1 * b_cols + j1] += sum;
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
 
-inline void mm_f32(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) {
+inline void mm_f32(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) 
+{
     // Ensure the input and weight dimensions are compatible
     if (a->shape[a->ndim - 1] != b->shape[0]) {
+      printf("tensor left ndim: %d", a->ndim);
+        print_tensor_shape("left", a);
+        print_tensor_shape("right", b);
         printf("Error: Input dimensions do not match weight dimensions.\n");
         return;
     }
@@ -548,7 +520,6 @@ void _sub_tensors(struct Tensor *a, const struct Tensor *b)
     }
 }
 
-
 void mul_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) 
 {
     if (a->ndim != b->ndim) {
@@ -599,7 +570,6 @@ void _mul_tensors(struct Tensor *a, const struct Tensor *b)
         a->data[i] *= b->data[i];
     }
 }
-
 
 inline void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result) 
 {
@@ -659,6 +629,102 @@ inline void _div_tensors(struct Tensor *a, const struct Tensor *b)
         } else {
             a->data[i] /= b->data[i];
         }
+    }
+}
+
+void _sin_tensors(struct Tensor* a) 
+{
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        a->data[i] = sinf(a->data[i]);
+    }
+}
+
+void _cos_tensors(struct Tensor* a) 
+{
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        a->data[i] = cosf(a->data[i]);
+    }
+}
+
+void _tan_tensors(struct Tensor* a) 
+{
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        a->data[i] = tanf(a->data[i]);
+    }
+}
+
+void _exp_tensors(struct Tensor* a) 
+{
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        a->data[i] = expf(a->data[i]);
+    }
+}
+
+void sin_tensors(const struct Tensor* a, struct Tensor* result) 
+{
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    result->size = a->size;
+    for (unsigned int i = 0; i < result->ndim; ++i) {
+        result->shape[i] = a->shape[i];
+    }
+    result->data = (float*)aligned_alloc(32, result->size * sizeof(float));
+
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        result->data[i] = sinf(a->data[i]);
+    }
+}
+
+void cos_tensors(const struct Tensor* a, struct Tensor* result) 
+{
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    result->size = a->size;
+    for (unsigned int i = 0; i < result->ndim; ++i) {
+        result->shape[i] = a->shape[i];
+    }
+    result->data = (float*)aligned_alloc(32, result->size * sizeof(float));
+
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        result->data[i] = cosf(a->data[i]);
+    }
+}
+
+void tan_tensors(const struct Tensor* a, struct Tensor* result) 
+{
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    result->size = a->size;
+    for (unsigned int i = 0; i < result->ndim; ++i) {
+        result->shape[i] = a->shape[i];
+    }
+    result->data = (float*)aligned_alloc(32, result->size * sizeof(float));
+
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        result->data[i] = tanf(a->data[i]);
+    }
+}
+
+void exp_tensors(const struct Tensor* a, struct Tensor* result) 
+{
+    result->ndim = a->ndim;
+    result->shape = (unsigned int*)malloc(result->ndim * sizeof(unsigned int));
+    result->size = a->size;
+    for (unsigned int i = 0; i < result->ndim; ++i) {
+        result->shape[i] = a->shape[i];
+    }
+    result->data = (float*)aligned_alloc(32, result->size * sizeof(float));
+
+    #pragma omp parallel for
+    for (unsigned long i = 0; i < a->size; ++i) {
+        result->data[i] = expf(a->data[i]);
     }
 }
 
@@ -1032,36 +1098,30 @@ void _sum_tensors_broadcast(
     const struct Tensor* b
     ) 
 {
-    if (!can_broadcast(a->shape, a->ndim, b->shape, b->ndim)) {
-        printf("Error: Tensors cannot be broadcast together.\n");
-        return;
+  printf("dimension check, %d, %d\n", a->shape[a->ndim - 1], b->shape[0]);
+  
+  if (a->shape[a->ndim - 1] != b->shape[0]) {
+    printf("error tensors cannot be broadcasted together.\n");
+    return;
+  }
+  print_tensor_shape("broadcast input", a);
+
+  if (a->ndim == 2 && b->ndim == 1) {
+    int n = a->shape[0];
+    printf("n = %d\n", n);
+    for (int i=0; i<n; i++) {
+      for (int j=0; j<a->shape[1]; j++)
+      {
+        printf("%lu %lu %d %d\n", a->size, b->size, i * n + j, j);
+        a->data[i * n + j] += b->data[j];
+      }
     }
-
-    unsigned int result_shape[4];
-    unsigned int result_ndim;
-    broadcast_shape(a->shape, a->ndim, b->shape, b->ndim, result_shape, &result_ndim);
-
-    #pragma omp parallel for
-    for (unsigned long i = 0; i < a->size; ++i) {
-        int idx[4] = {0};
-        int temp = i;
-        for (int d = a->ndim - 1; d >= 0; --d) {
-            idx[d] = temp % a->shape[d];
-            temp /= a->shape[d];
-        }
-
-        unsigned long b_idx = 0;
-        for (unsigned int d = 0; d < b->ndim; ++d) {
-            if (b->shape[d] != 1) {
-                b_idx = b_idx * b->shape[d] + idx[a->ndim - b->ndim + d];
-            }
-        }
-
-        a->data[i] += b->data[b_idx];
-    }
+  }
+  printf("done\n");
 }
 
-void transpose_tensor(const struct Tensor* input, struct Tensor* output) {
+void transpose_tensor(const struct Tensor* input, struct Tensor* output) 
+{
     if (input->ndim != 2) {
         printf("Error: Transpose is only supported for 2D tensors.\n");
         return;
@@ -1080,4 +1140,63 @@ void transpose_tensor(const struct Tensor* input, struct Tensor* output) {
             output->data[j * output->shape[1] + i] = input->data[i * input->shape[1] + j];
         }
     }
+}
+
+void ln_forward(struct LayerNorm *ln, struct Tensor *inp, unsigned int axis, float eps)
+{
+  if (axis >= inp->ndim) {
+    printf("Error exis %u is out of bounds for tensor with %u dimensions. \n", axis, inp->ndim);
+    return;
+  }
+
+  struct Tensor mean_tensor = reduce_mean_axis(inp, axis);
+  printf("mean computed\n");
+  print_tensor(&mean_tensor);
+  struct Tensor std_tensor = reduce_std_axis(inp, axis);
+  print_tensor(&std_tensor);
+  printf("std computed\n");
+
+  for (unsigned long i=0; i<inp->size; ++i) {
+    int idx[4] = {0};
+    int temp = i;
+
+    for (int d=inp->ndim - 1; d >= 0; --d) {
+      idx[d] = temp % inp->shape[d];
+      temp /= inp->shape[d];
+    }
+
+    int result_idx = 0;
+    for (unsigned int d=0; d < inp->ndim; ++d) {
+      if (d != axis) {
+        result_idx += result_idx * inp->shape[d] + idx[d];
+      }
+    }
+
+    float mean = mean_tensor.data[result_idx];
+    float std = std_tensor.data[result_idx];
+    float norm = (inp->data[i] - mean) / (std + eps);
+
+    unsigned long gamma_idx = idx[axis];
+    inp->data[i] = ln->gamma->data[gamma_idx] * norm + ln->beta->data[gamma_idx];
+  }
+
+  free_tensor(&mean_tensor);
+  free_tensor(&std_tensor);
+}
+
+void linear_forward(struct Linear *l, struct Tensor *x, struct Tensor *o)
+{
+  struct Tensor temp;
+
+  if (x->shape[x->ndim - 1] != l->w->shape[0]) {
+    print_tensor_shape("left: ", x);
+    print_tensor_shape("right: ", l->w);
+    printf("error: Input dimensions do not match weight dimensions. \n");
+    return;
+  }
+
+  mm_f32(x, l->w, o);
+  printf("mm done\n");
+  // free_tensor(&temp);
+  _sum_tensors_broadcast(o, l->b);
 }

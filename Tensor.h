@@ -113,6 +113,16 @@ void _mul_tensor_scaler(struct Tensor *a, float scaler);
 void div_tensors(const struct Tensor* a, const struct Tensor* b, struct Tensor* result);
 void _div_tensors(struct Tensor *a, const struct Tensor *b);
 
+void _sin_tensors(struct Tensor *a);
+void _cos_tensors(struct Tensor *a);
+void _tan_tensors(struct Tensor *a);
+void _exp_tensors(struct Tensor *a);
+
+void sin_tensors(const struct Tensor *a, struct Tensor *result);
+void cos_tensors(const struct Tensor *a, struct Tensor *result);
+void tan_tensors(const struct Tensor *a, struct Tensor *result);
+void exp_tensors(const struct Tensor *a, struct Tensor *result);
+
 float reduce_sum(struct Tensor *t);
 struct Tensor reduce_sum_axis(const struct Tensor *a, unsigned int axis);
 
@@ -131,4 +141,8 @@ struct Tensor reduce_std_axis(const struct Tensor *a, unsigned int axis);
 void mm_f32(const struct Tensor *a, const struct Tensor *b, struct Tensor *c);
 
 void transpose_tensor(const struct Tensor *inp, struct Tensor *out);
+
+void ln_forward(struct LayerNorm *ln, struct Tensor *inp, unsigned int axis, float eps);
+
+void linear_forward(struct Linear *l, struct Tensor *x, struct Tensor *o);
 #endif // HELPER_H
