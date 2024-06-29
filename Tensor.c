@@ -1108,11 +1108,9 @@ void _sum_tensors_broadcast(
 
   if (a->ndim == 2 && b->ndim == 1) {
     int n = a->shape[0];
-    printf("n = %d\n", n);
     for (int i=0; i<n; i++) {
       for (int j=0; j<a->shape[1]; j++)
       {
-        printf("%lu %lu %d %d\n", a->size, b->size, i * n + j, j);
         a->data[i * n + j] += b->data[j];
       }
     }
@@ -1199,4 +1197,5 @@ void linear_forward(struct Linear *l, struct Tensor *x, struct Tensor *o)
   printf("mm done\n");
   // free_tensor(&temp);
   _sum_tensors_broadcast(o, l->b);
+  print_tensor(o);
 }
