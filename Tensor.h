@@ -76,6 +76,7 @@ void free_linear(struct Linear *layer);
 void free_ln(struct LayerNorm *ln);
 
 void print_tensor_shape(const char *name, const struct Tensor *tensor);
+char *get_tensor_shape_str(const struct Tensor *a);
 
 void print_first_elements(struct Tensor *t);
 

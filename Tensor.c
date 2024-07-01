@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <float.h>
 #include <math.h>
+#include <stdbool.h>
 
 #define TILE_SIZE 32
 typedef float afloat __attribute__ ((__aligned__(256)));
@@ -132,6 +133,28 @@ static int can_broadcast(
     return 1;
 }
 
+bool broadcast_check(struct Tensor *a, struct Tensor *b) {
+  printf("%d, %d\n", a->ndim, b->ndim);
+
+  if (b->ndim > a->ndim) {
+    fprintf(stderr, "number of tensor dimension mismatch %d %d\n", b->ndim, a->ndim);
+    fprintf(stderr, "tensors not broadcastable %s %s\n", get_tensor_shape_str(a), get_tensor_shape_str(b));
+    return false;
+    // exit(EXIT_FAILURE);
+  }
+  int dim = 1, ld, rd;
+  while (dim <= b->ndim) {
+    ld = a->shape[a->ndim - dim];
+    rd = b->shape[b->ndim - dim];
+    if (!(rd != 1 || ld != rd)) {
+      return false;
+    }
+    ++dim;
+  }
+  return true;
+}
+
+
 static void broadcast_shape(
     unsigned int* shape_a, 
     unsigned int ndim_a, 
@@ -166,6 +189,16 @@ inline struct Tensor create_tensor(unsigned int* shape, unsigned int ndim)
 inline float random_float()
 {
     return (float)rand() / (float)RAND_MAX;
+}
+
+void reverse_array(unsigned int *arr, int n) 
+{
+    int temp;
+    for (int i = 0; i < n / 2; i++) {
+        temp = arr[i];
+        arr[i] = arr[n - i - 1];
+        arr[n - i - 1] = temp;
+    }
 }
 
 inline struct Tensor rand_tensor(unsigned int *shape, unsigned int ndim)
@@ -243,6 +276,40 @@ inline void print_tensor_shape(const char* name, const struct Tensor *tensor)
         }
     }
     printf("]\n");
+}
+
+char* get_tensor_shape_str(const struct Tensor* tensor) {
+    // Estimate the length of the shape string
+    size_t buffer_size = tensor->ndim * 20;  // Allocate more than needed for dimension and commas
+    char* shape_str = (char*)malloc(buffer_size);
+    if (shape_str == NULL) {
+        return NULL;  // Memory allocation failed
+    }
+
+    char* cursor = shape_str;
+    size_t remaining = buffer_size;
+    int written;
+
+    // Start the shape string with '['
+    written = snprintf(cursor, remaining, "[");
+    cursor += written;
+    remaining -= written;
+
+    // Append each dimension to the string
+    for (unsigned int i = 0; i < tensor->ndim; i++) {
+        if (i < tensor->ndim - 1) {
+            written = snprintf(cursor, remaining, "%u, ", tensor->shape[i]);
+        } else {
+            written = snprintf(cursor, remaining, "%u", tensor->shape[i]);
+        }
+        cursor += written;
+        remaining -= written;
+    }
+
+    // Close the shape string with ']'
+    snprintf(cursor, remaining, "]");
+
+    return shape_str;
 }
 
 void print_tensor(const struct Tensor *tensor) 
