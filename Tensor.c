@@ -133,7 +133,8 @@ static int can_broadcast(
     return 1;
 }
 
-bool broadcast_check(struct Tensor *a, struct Tensor *b) {
+bool broadcast_check(struct Tensor *a, struct Tensor *b) 
+{
   printf("%d, %d\n", a->ndim, b->ndim);
 
   if (b->ndim > a->ndim) {
@@ -153,7 +154,6 @@ bool broadcast_check(struct Tensor *a, struct Tensor *b) {
   }
   return true;
 }
-
 
 static void broadcast_shape(
     unsigned int* shape_a, 
@@ -278,7 +278,8 @@ inline void print_tensor_shape(const char* name, const struct Tensor *tensor)
     printf("]\n");
 }
 
-char* get_tensor_shape_str(const struct Tensor* tensor) {
+char* get_tensor_shape_str(const struct Tensor* tensor) 
+{
     // Estimate the length of the shape string
     size_t buffer_size = tensor->ndim * 20;  // Allocate more than needed for dimension and commas
     char* shape_str = (char*)malloc(buffer_size);
