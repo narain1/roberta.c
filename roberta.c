@@ -17,7 +17,8 @@ typedef struct
   int id;
 } TokenIndex;
 
-typedef struct {
+typedef struct 
+{
   char **vocab;
   float *vocab_scores;
   TokenIndex *sorted_vocab;
@@ -26,7 +27,8 @@ typedef struct {
   unsigned char byte_pieces[512];
 } Tokenizer;
 
-struct ModelConfig {
+struct ModelConfig 
+{
   unsigned int vocab_size;
   unsigned int hidden_size;
   unsigned int intermediate_size;
@@ -44,14 +46,16 @@ struct ModelConfig base_config = {
   .n_max_tokens = 512
 };
 
-struct EmbeddingLayer {
+struct EmbeddingLayer 
+{
   struct Tensor *word_emb;
   struct Tensor *pos_emb;
   struct Tensor *tok_type_w;
   struct LayerNorm *ln;
 };
 
-struct EncoderLayer {
+struct EncoderLayer 
+{
   struct Linear *query;
   struct Linear *key;
   struct Linear *value;
@@ -62,7 +66,8 @@ struct EncoderLayer {
   struct LayerNorm *ln2;
 };
 
-struct Classifier {
+struct Classifier 
+{
   struct Tensor *pred_bias;
   struct Linear *transform_linear;
   struct LayerNorm *ln;
@@ -70,7 +75,8 @@ struct Classifier {
   struct Linear *seq;
 };
 
-struct RobertaModel {
+struct RobertaModel 
+{
   struct ModelConfig *config;
   struct EmbeddingLayer *embed;
   struct EncoderLayer *layers;
@@ -78,7 +84,8 @@ struct RobertaModel {
   struct Classifier *clf;
 };
 
-struct Buffer {
+struct Buffer 
+{
   struct Tensor *word_emb;
   struct Tensor *pos_emb;
   struct Tensor *tok_type_w;
@@ -87,7 +94,8 @@ struct Buffer {
   struct Tensor *layer_v;
 };
 
-void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) {
+void load_tensor(float *data, const unsigned long size, unsigned long *offset, char *buffer) 
+{
   data = (float*)malloc(sizeof(float) * size);
   printf("size of offset is %lu %lu\n", *offset, size);
   for (size_t i=0; i<size; i++) {
@@ -96,7 +104,8 @@ void load_tensor(float *data, const unsigned long size, unsigned long *offset, c
   *offset += size; 
 }
 
-void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
+void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) 
+{
   unsigned int *conf_arr = (unsigned int *)malloc(sizeof(int) * *conf_sz);
   for (int i=0; i< *conf_sz; i++) {
     conf_arr[i] = *((unsigned int*)(buffer + sizeof(int) + sizeof(int) * i));
@@ -111,7 +120,8 @@ void load_config(struct ModelConfig *data, char *buffer, int *conf_sz) {
   data->n_hidden_layers = conf_arr[5];
 }
 
-void initialize_parameters(struct RobertaModel *model) {
+void initialize_parameters(struct RobertaModel *model) 
+{
 
   // initializing embedding layer
   model->embed = (struct EmbeddingLayer*)malloc(sizeof(struct EmbeddingLayer));
@@ -145,7 +155,8 @@ void initialize_parameters(struct RobertaModel *model) {
   initialize_linear(&(model->clf->seq));
 }
 
-void initialize_buffer(struct Buffer *buffer) {
+void initialize_buffer(struct Buffer *buffer) 
+{
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->tok_type_w = (struct Tensor*)malloc(sizeof(struct Tensor));
@@ -154,7 +165,8 @@ void initialize_buffer(struct Buffer *buffer) {
   buffer->layer_v = (struct Tensor*)malloc(sizeof(struct Tensor));
 }
 
-void load_model(struct RobertaModel *model, const char *fname) {
+void load_model(struct RobertaModel *model, const char *fname) 
+{
   printf("%s: loading model from '%s'\n", __func__, fname);
   
   int fd;
@@ -244,7 +256,8 @@ void load_model(struct RobertaModel *model, const char *fname) {
   }
 }
 
-void free_encoder_layers(struct EncoderLayer *layers, int n_layers) {
+void free_encoder_layers(struct EncoderLayer *layers, int n_layers) 
+{
     if (layers != NULL) {
         for (int i = 0; i < n_layers; ++i) {
             free_linear(layers[i].query);
@@ -260,7 +273,8 @@ void free_encoder_layers(struct EncoderLayer *layers, int n_layers) {
     }
 }
 
-void free_embedding_layer(struct EmbeddingLayer *embed) {
+void free_embedding_layer(struct EmbeddingLayer *embed) 
+{
     if (embed != NULL) {
         free_tensor(embed->word_emb);
         free_tensor(embed->pos_emb);
@@ -270,7 +284,8 @@ void free_embedding_layer(struct EmbeddingLayer *embed) {
     }
 }
 
-void free_classifier(struct Classifier *clf) {
+void free_classifier(struct Classifier *clf) 
+{
     if (clf != NULL) {
         free_tensor(clf->pred_bias);
         free_linear(clf->transform_linear);
@@ -281,7 +296,8 @@ void free_classifier(struct Classifier *clf) {
     }
 }
 
-void free_model(struct RobertaModel *model) {
+void free_model(struct RobertaModel *model) 
+{
     if (model != NULL) {
        // if (model->config != NULL) {
        //     free(model->config); 
@@ -294,7 +310,8 @@ void free_model(struct RobertaModel *model) {
     }
 }
 
-void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
+void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) 
+{
   t->vocab_size = vocab_size;
   t->vocab = (char**)malloc(vocab_size * sizeof(char*));
   t->vocab_scores = (float*)malloc(vocab_size * sizeof(float));
@@ -320,7 +337,8 @@ void build_tokenizer(Tokenizer *t, char* tokenizer_path, int vocab_size) {
   fclose(file);
 }
 
-void free_tokenizer(Tokenizer* t) {
+void free_tokenizer(Tokenizer* t) 
+{
   for (int i=0; i<t->vocab_size; i++) { free(t->vocab[i]); }
   free(t->vocab);
   free(t->vocab_scores);
@@ -329,7 +347,8 @@ void free_tokenizer(Tokenizer* t) {
   printf("tokenizer freed\n");
 }
 
-void print_model_tensors(const struct RobertaModel *model) {
+void print_model_tensors(const struct RobertaModel *model) 
+{
     // Print embedding layer tensors
     print_tensor_shape("Word Embeddings", model->embed->word_emb);
     print_tensor_shape("Position Embeddings", model->embed->pos_emb);
@@ -396,17 +415,20 @@ void print_model_tensors(const struct RobertaModel *model) {
     print_tensor_shape("Classifier Seq Bias", model->clf->seq->b);
 }
 
-int compare_tokens(const void *a, const void *b) {
+int compare_tokens(const void *a, const void *b) 
+{
   return strcmp(((TokenIndex*)a)->s, ((TokenIndex*)b)->s);
 }
 
-int str_lookup(char *s, TokenIndex *sorted_vocab, int vocab_size) {
+int str_lookup(char *s, TokenIndex *sorted_vocab, int vocab_size) 
+{
   TokenIndex tok = { .s = s };
   TokenIndex *res = bsearch(&tok, sorted_vocab, vocab_size, sizeof(TokenIndex), compare_tokens);
   return res != NULL ? res->id : -1;
 }
 
-void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, int *n_tokens) {
+void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, int *n_tokens) 
+{
   if (t->sorted_vocab == NULL) {
     t->sorted_vocab = malloc(t->vocab_size * sizeof(TokenIndex));
     for (int i=0; i<t->vocab_size; i++) {
@@ -455,7 +477,8 @@ void bpe_encode(Tokenizer *t, char *text, int8_t bos, int8_t eos, int *tokens, i
   free(str_buffer);
 }
 
-char* decode(Tokenizer* t, int prev_token, int token) {
+char* decode(Tokenizer* t, int prev_token, int token) 
+{
     char *piece = t->vocab[token];
     // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
     if (prev_token == 1 && piece[0] == ' ') { piece++; }
@@ -468,9 +491,8 @@ char* decode(Tokenizer* t, int prev_token, int token) {
     return piece;
 }
 
- 
-
-void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
+void forward(struct RobertaModel *model, int *tokens, int n_tokens) 
+{
   struct Buffer *buffer = (struct Buffer*)malloc(sizeof(struct Buffer));
   buffer->word_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
   buffer->pos_emb = (struct Tensor*)malloc(sizeof(struct Tensor));
@@ -523,7 +545,8 @@ void forward(struct RobertaModel *model, int *tokens, int n_tokens) {
   // print_tensor(buffer->layer_q);
 }
 
-void main() {
+void main() 
+{
   unsigned int vocab_size = 30522;
   Tokenizer tokenizer;
   char *tokenizer_path = "tokenizer.bin";
