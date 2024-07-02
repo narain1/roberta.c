@@ -1,6 +1,7 @@
 #ifndef HELPER_H
 #define HELPER_H
 #include <stdalign.h>
+#include <stdbool.h>
 
 #define FLT_MAX 3.402823466e+38F /* max value */
 #define FLT_MIN 1.175494351e-38F /* min positive value */
@@ -52,6 +53,8 @@ unsigned long d3,
     unsigned long *offset,
     char *buffer);
 
+bool broadcast_check(struct Tensor *a, struct Tensor *b);
+
 void initialize_linear(struct Linear **layer);
 
 void initialize_ln(struct LayerNorm **ln);
@@ -82,7 +85,7 @@ void print_first_elements(struct Tensor *t);
 
 void print_tensor(const struct Tensor *t);
 
-void arange(int **arr, int low, int high);
+struct Tensor arange(int n);
 
 void arr_zeros(int **arr, unsigned int size);
 

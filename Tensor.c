@@ -398,17 +398,20 @@ void print_tensor(const struct Tensor *tensor)
     } else {
         printf("Printing for tensors with ndim > 4 is not implemented.\n");
     }
+    printf("\n");
 }
 
-inline void arange(int **arr, int low, int high) 
+struct Tensor arange(int n) 
 {
-  *arr = (int *)malloc(sizeof(int) * abs(high - low));
-  size_t size = abs(high-low);
-  for (int i=0; i<size; i++) {
-    (*arr)[i] = low + i;
+  unsigned int *s = (unsigned int *)malloc(sizeof(unsigned int));
+  s[0] = n;
+  struct Tensor arr = create_tensor(s, 1);
+  for (int i=0; i<n; i+=1) {
+    arr.data[i] = i;
   }
+  return arr;
 }
-
+    
 inline void arr_zeros(int **arr, unsigned int size)  
 {
    *arr = (int *)calloc(sizeof(int), size);
